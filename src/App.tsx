@@ -5,6 +5,7 @@ import { RamtalView } from './components/RamtalView';
 import { FoodDeptView } from './components/FoodDeptView';
 import { AdminView } from './components/AdminView';
 import { ClockReconciliationView } from './components/ClockReconciliationView';
+import { PasswordGate } from './components/PasswordGate';
 import { 
   mockUsers, 
   mockSuppliers, 
@@ -28,6 +29,9 @@ import {
 const API_BASE = 'http://127.0.0.1:3001/api';
 
 export const App: React.FC = () => {
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    return localStorage.getItem('police_meal_gate_auth') === 'authenticated';
+  });
   const [currentUser, setCurrentUser] = useState<User>(mockUsers[0]);
   const [kitchens, setKitchens] = useState<Kitchen[]>(mockKitchens);
   const [dailyReports, setDailyReports] = useState<DailyReportRow[]>(initialDailyReports);
@@ -267,6 +271,15 @@ export const App: React.FC = () => {
     }));
   };
 
+  const handleLockSystem = () => {
+    localStorage.removeItem('police_meal_gate_auth');
+    setIsAuthenticated(false);
+  };
+
+  if (!isAuthenticated) {
+    return <PasswordGate onSuccess={() => setIsAuthenticated(true)} />;
+  }
+
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col font-heebo">
       
@@ -275,6 +288,7 @@ export const App: React.FC = () => {
         currentUser={currentUser}
         onSelectUser={handleSelectUser}
         selectedPeriod={{ month: 8, year: 2026 }}
+        onLockSystem={handleLockSystem}
       />
 
       {/* Navigation Sub-Bar */}

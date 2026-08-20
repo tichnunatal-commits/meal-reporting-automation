@@ -1,15 +1,16 @@
 import React, { useState } from 'react';
 import { User } from '../types';
 import { mockUsers } from '../data/mockData';
-import { ShieldCheck, UserCheck, Calendar, ChevronDown, Menu, X } from 'lucide-react';
+import { ShieldCheck, UserCheck, Calendar, ChevronDown, Lock } from 'lucide-react';
 
 interface HeaderProps {
   currentUser: User;
   onSelectUser: (user: User) => void;
   selectedPeriod: { month: number; year: number };
+  onLockSystem?: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ currentUser, onSelectUser, selectedPeriod }) => {
+export const Header: React.FC<HeaderProps> = ({ currentUser, onSelectUser, selectedPeriod, onLockSystem }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
@@ -69,10 +70,30 @@ export const Header: React.FC<HeaderProps> = ({ currentUser, onSelectUser, selec
               </div>
             </div>
 
+            {/* Lock Button */}
+            {onLockSystem && (
+              <button
+                onClick={onLockSystem}
+                title="נעילת מסך וחזרה למסך סיסמה"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-red-950/60 hover:text-red-300 border border-slate-700 hover:border-red-800 text-slate-400 text-xs rounded-lg transition"
+              >
+                <Lock className="w-3.5 h-3.5 text-slate-400" />
+                <span>נעילה</span>
+              </button>
+            )}
+
           </div>
 
           {/* Mobile Toggle Button */}
           <div className="flex items-center gap-2 md:hidden">
+            {onLockSystem && (
+              <button
+                onClick={onLockSystem}
+                className="p-1.5 bg-slate-800 border border-slate-700 text-slate-400 rounded-lg"
+              >
+                <Lock className="w-3.5 h-3.5" />
+              </button>
+            )}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               className="flex items-center gap-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs px-2.5 py-1.5 rounded-lg transition"
