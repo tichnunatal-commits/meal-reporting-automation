@@ -19,6 +19,7 @@ export const PasswordGate: React.FC<PasswordGateProps> = ({ onSuccess }) => {
       onSuccess();
     } else {
       setError(true);
+      setPassword('');
     }
   };
 
