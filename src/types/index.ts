@@ -38,6 +38,7 @@ export interface Kitchen {
   supplierId: number;             // DR-05: שייך לספק יחיד
   defaultRamtalUserId: number;
   region: string;                 // מחוז / מרחב
+  cluster?: string;               // אשכול מכרז (אשכול א-ח, לכיש, נגב, מכמש, אילת)
   isActive: boolean;              // DR-02: אין מחיקה
   activeStartDate: string;        // DR-03
   effectiveEndDate?: string;      // DR-04
