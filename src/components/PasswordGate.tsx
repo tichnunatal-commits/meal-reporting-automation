@@ -13,7 +13,8 @@ export const PasswordGate: React.FC<PasswordGateProps> = ({ onSuccess }) => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (password === 'meal123456') {
-      localStorage.setItem('police_meal_gate_auth', 'authenticated');
+      sessionStorage.setItem('police_meal_gate_session_v2', 'authenticated');
+      localStorage.removeItem('police_meal_gate_auth');
       setError(false);
       onSuccess();
     } else {
@@ -22,7 +23,7 @@ export const PasswordGate: React.FC<PasswordGateProps> = ({ onSuccess }) => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4" dir="rtl">
+    <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 selection:bg-blue-600 selection:text-white font-heebo" dir="rtl">
       {/* Decorative Police Accent Line */}
       <div className="fixed top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-blue-600 via-sky-400 to-indigo-600 shadow-[0_0_15px_rgba(59,130,246,0.5)]"></div>
 
@@ -89,7 +90,7 @@ export const PasswordGate: React.FC<PasswordGateProps> = ({ onSuccess }) => {
 
           <button
             type="submit"
-            className="w-full py-3.5 px-4 bg-gradient-to-r from-blue-600 hover:from-blue-500 to-indigo-600 hover:to-indigo-500 text-white font-medium rounded-xl shadow-lg shadow-blue-600/25 hover:shadow-blue-600/40 transition duration-200 flex items-center justify-center gap-2 group"
+            className="w-full py-3.5 px-4 bg-gradient-to-r from-blue-600 hover:from-blue-500 to-indigo-600 hover:to-indigo-500 text-white font-medium rounded-xl shadow-lg shadow-blue-600/25 hover:shadow-blue-600/40 transition duration-200 flex items-center justify-center gap-2 group cursor-pointer"
           >
             <span>כניסה למערכת</span>
             <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />

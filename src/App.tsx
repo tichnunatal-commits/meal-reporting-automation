@@ -30,7 +30,7 @@ const API_BASE = 'http://127.0.0.1:3001/api';
 
 export const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    return localStorage.getItem('police_meal_gate_auth') === 'authenticated';
+    return sessionStorage.getItem('police_meal_gate_session_v2') === 'authenticated';
   });
   const [currentUser, setCurrentUser] = useState<User>(mockUsers[0]);
   const [kitchens, setKitchens] = useState<Kitchen[]>(mockKitchens);
@@ -272,6 +272,7 @@ export const App: React.FC = () => {
   };
 
   const handleLockSystem = () => {
+    sessionStorage.removeItem('police_meal_gate_session_v2');
     localStorage.removeItem('police_meal_gate_auth');
     setIsAuthenticated(false);
   };
