@@ -1,0 +1,46 @@
+{
+  "name": "police-meal-reporting-automation",
+  "version": "1.0.0",
+  "description": "מערכת למיכון דיווח ובקרת כמויות ארוחות מחוץ לשעון עבור מדור מזון ומשטרת ישראל",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "test": "node --test src/engine/__tests__/*.test.js",
+    "server": "node src/server/index.js"
+  },
+  "keywords": [
+    "police",
+    "meal-reporting",
+    "automation",
+    "food-department"
+  ],
+  "author": "Yishai & Or - Economic Efficiency Unit",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "clsx": "^2.1.1",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "lucide-react": "^0.468.0",
+    "multer": "^2.2.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tailwind-merge": "^2.5.5",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/multer": "^2.2.0",
+    "@types/node": "^22.10.2",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.16",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.3"
+  }
+}
