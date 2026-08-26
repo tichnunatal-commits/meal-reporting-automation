@@ -2125,5 +2125,5 @@ export const mockDailyRows: DailyReportRow[] = [
   }
 ];
 
-export const initialMonthlySummaries = mockMonthlySummaries;
-export const initialDailyReports = mockDailyRows;
+export const initialMonthlySummaries: MonthlyKitchenSummary[] = [];
+export const initialDailyReports: DailyReportRow[] = [];

@@ -6,22 +6,22 @@ import { FoodDeptView } from './components/FoodDeptView';
 import { AdminView } from './components/AdminView';
 import { ClockReconciliationView } from './components/ClockReconciliationView';
 import { PasswordGate } from './components/PasswordGate';
-import { 
-  mockUsers, 
-  mockSuppliers, 
-  mockKitchens, 
-  mockMealTypes, 
-  mockTariffs, 
-  initialDailyReports, 
-  initialMonthlySummaries 
+import {
+  mockUsers,
+  mockSuppliers,
+  mockKitchens,
+  mockMealTypes,
+  mockTariffs,
+  initialDailyReports,
+  initialMonthlySummaries
 } from './data/mockData';
 import { DailyReportRow, Kitchen, MonthlyKitchenSummary, User } from './types';
 import { MealCalculationEngine } from './engine/calculator';
-import { 
-  FileEdit, 
-  CheckCircle2, 
-  BarChart3, 
-  Settings, 
+import {
+  FileEdit,
+  CheckCircle2,
+  BarChart3,
+  Settings,
   Clock,
   Sparkles
 } from 'lucide-react';
@@ -33,7 +33,9 @@ export const App: React.FC = () => {
     return sessionStorage.getItem('police_meal_gate_session_v2') === 'authenticated';
   });
   const [currentUser, setCurrentUser] = useState<User>(mockUsers[0]);
-  const [kitchens, setKitchens] = useState<Kitchen[]>(mockKitchens);
+
+  // תיקון 1: מתחילים עם רשימה ריקה כדי לאלץ טעינה מהשרת
+  const [kitchens, setKitchens] = useState<Kitchen[]>([]);
   const [dailyReports, setDailyReports] = useState<DailyReportRow[]>(initialDailyReports);
   const [monthlySummaries, setMonthlySummaries] = useState<MonthlyKitchenSummary[]>(initialMonthlySummaries);
   const [activeTab, setActiveTab] = useState<'supplier' | 'ramtal' | 'food_dept' | 'clock_sync' | 'admin'>('supplier');
@@ -55,7 +57,8 @@ export const App: React.FC = () => {
               id: k.id,
               kitchenCode: k.kitchen_code,
               name: k.name,
-              supplierId: k.supplier_id,
+              // שיוך התחנות לספק הפעיל דוד מלכה (supplierId: 1)
+              supplierId: 1,
               defaultRamtalUserId: k.default_ramtal_user_id,
               region: k.region,
               isActive: k.is_active === 1,
@@ -86,7 +89,6 @@ export const App: React.FC = () => {
     fetchData();
   }, []);
 
-  // שינוי תפקיד אוטומטי לפי המשתמש שנבחר ב-Header
   const handleSelectUser = (user: User) => {
     setCurrentUser(user);
     if (user.role === 'supplier_reporter') setActiveTab('supplier');
@@ -96,7 +98,6 @@ export const App: React.FC = () => {
     else if (user.role === 'system_admin') setActiveTab('admin');
   };
 
-  // הוספת שורת דיווח יומית
   const handleAddDailyReport = async (newRow: Omit<DailyReportRow, 'id'>) => {
     try {
       await fetch(`${API_BASE}/reports/daily`, {
@@ -127,7 +128,6 @@ export const App: React.FC = () => {
     }));
   };
 
-  // הגשת חודש לאישור רמת"ל
   const handleSubmitMonth = async (summaryId: number) => {
     try {
       await fetch(`${API_BASE}/reports/submit-month`, {
@@ -151,7 +151,6 @@ export const App: React.FC = () => {
     }));
   };
 
-  // אישור חודש ע"י רמת"ל
   const handleApproveSummary = async (summaryId: number) => {
     try {
       await fetch(`${API_BASE}/reports/ramtal-approve`, {
@@ -168,7 +167,7 @@ export const App: React.FC = () => {
         const k = kitchens.find(item => item.id === s.kitchenId);
         const kReports = dailyReports.filter(r => r.kitchenId === s.kitchenId);
         const kTariffs = mockTariffs.filter(t => t.kitchenId === s.kitchenId);
-        
+
         const calc = k ? MealCalculationEngine.calculateMonthlySummary(k, kReports, kTariffs) : null;
 
         return {
@@ -183,7 +182,6 @@ export const App: React.FC = () => {
     }));
   };
 
-  // החזרת חודש לעריכת הספק
   const handleReturnSummary = async (summaryId: number, reason: string) => {
     try {
       await fetch(`${API_BASE}/reports/ramtal-return`, {
@@ -207,7 +205,6 @@ export const App: React.FC = () => {
     }));
   };
 
-  // עריכת כמות נקודתית בשורה ע"י רמת"ל
   const handleAdjustDailyRow = async (rowId: number, newQty: number, reason: string) => {
     try {
       await fetch(`${API_BASE}/reports/ramtal-adjust-row`, {
@@ -231,7 +228,6 @@ export const App: React.FC = () => {
     }));
   };
 
-  // אישור סופי ע"י מדור מזון
   const handleFinalApproveSummary = async (summaryId: number) => {
     try {
       await fetch(`${API_BASE}/reports/food-dept-approve`, {
@@ -255,7 +251,6 @@ export const App: React.FC = () => {
     }));
   };
 
-  // השבתת / הפעלת מטבח (DR-02 / DR-04)
   const handleToggleKitchenActive = async (kitchenId: number) => {
     try {
       await fetch(`${API_BASE}/kitchens/${kitchenId}/toggle-active`, { method: 'POST' });
@@ -283,7 +278,7 @@ export const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col font-heebo">
-      
+
       {/* Top Header */}
       <Header
         currentUser={currentUser}
@@ -296,7 +291,7 @@ export const App: React.FC = () => {
       <nav className="bg-white border-b border-slate-200 sticky top-16 z-40 shadow-xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-12">
-            
+
             <div className="flex items-center space-x-1 space-x-reverse overflow-x-auto">
               <button
                 onClick={() => setActiveTab('supplier')}
@@ -432,3 +427,5 @@ export const App: React.FC = () => {
     </div>
   );
 };
+
+export default App;

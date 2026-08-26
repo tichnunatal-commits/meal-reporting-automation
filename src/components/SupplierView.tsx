@@ -21,7 +21,8 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
   onAddDailyReport,
   onSubmitMonth,
 }) => {
-  const myKitchens = kitchens.filter(k => k.supplierId === currentUser.supplierId);
+  const filteredKitchens = kitchens.filter(k => k.supplierId === currentUser.supplierId);
+  const myKitchens = filteredKitchens.length > 0 ? filteredKitchens : kitchens;
   const [selectedKitchenId, setSelectedKitchenId] = useState<number>(myKitchens[0]?.id || 1);
 
   const selectedKitchen = kitchens.find(k => k.id === selectedKitchenId);
