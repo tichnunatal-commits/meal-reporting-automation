@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Kitchen, KitchenTariff, Supplier, User } from '../types';
-import { Settings, Shield, Plus, Building, UserPlus, FileKey, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Settings, Shield, Plus, Building, UserPlus, FileKey, CheckCircle2, AlertCircle, Search, X } from 'lucide-react';
+import { formatKitchenDisplayName } from './SearchableKitchenSelect';
 
 interface AdminViewProps {
   currentUser: User;
@@ -22,6 +23,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
   const [activeTab, setActiveTab] = useState<'kitchens' | 'suppliers' | 'tariffs' | 'users'>('kitchens');
   const [selectedClusterFilter, setSelectedClusterFilter] = useState<string>('all');
   const [selectedKitchenFilter, setSelectedKitchenFilter] = useState<string>('all');
+  const [kitchenSearchQuery, setKitchenSearchQuery] = useState<string>('');
 
   const sortedKitchens = [...kitchens].sort((a, b) => {
     const clusterComp = (a.cluster || a.region || '').localeCompare(b.cluster || b.region || '', 'he');
@@ -33,11 +35,28 @@ export const AdminView: React.FC<AdminViewProps> = ({
     tariffs.map(t => t.clusterName || kitchens.find(k => k.id === t.kitchenId)?.cluster || '').filter(Boolean)
   )).sort((a, b) => a.localeCompare(b, 'he'));
 
+  // תלות סינון: מטבחי האשכול הנבחר בלבד
+  const clusterKitchens = sortedKitchens.filter(k => 
+    selectedClusterFilter === 'all' || (k.cluster || k.region) === selectedClusterFilter
+  );
+
+  const searchedClusterKitchens = clusterKitchens.filter(k => {
+    if (!kitchenSearchQuery.trim()) return true;
+    const q = kitchenSearchQuery.toLowerCase().trim();
+    return k.name.toLowerCase().includes(q) || (k.cluster || '').toLowerCase().includes(q);
+  });
+
   const filteredTariffs = tariffs.filter(t => {
     const k = kitchens.find(k => k.id === t.kitchenId);
     const cluster = t.clusterName || k?.cluster || '';
     if (selectedClusterFilter !== 'all' && cluster !== selectedClusterFilter) return false;
     if (selectedKitchenFilter !== 'all' && String(t.kitchenId) !== selectedKitchenFilter) return false;
+    if (kitchenSearchQuery.trim()) {
+      const q = kitchenSearchQuery.toLowerCase().trim();
+      const kName = (t.kitchenName || k?.name || '').toLowerCase();
+      const cName = cluster.toLowerCase();
+      if (!kName.includes(q) && !cName.includes(q)) return false;
+    }
     return true;
   });
 
@@ -127,8 +146,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
                   const supplier = suppliers.find(s => s.id === k.supplierId);
                   return (
                     <tr key={k.id} className="hover:bg-slate-50">
-                      <td className="p-3 font-mono font-bold text-slate-700">{k.kitchenCode}</td>
-                      <td className="p-3 font-bold text-slate-900">{k.name}</td>
+                      <td className="p-3 font-bold text-slate-900">{formatKitchenDisplayName(k)}</td>
                       <td className="p-3 text-slate-600">{k.region}</td>
                       <td className="p-3 text-slate-800">{supplier?.name || '-'}</td>
                       <td className="p-3">
@@ -199,6 +217,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
 
           {/* Filter Bar */}
           <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex flex-wrap items-center gap-3 text-xs">
+            {/* Cluster Filter */}
             <div className="flex items-center gap-2">
               <label className="font-bold text-slate-700">סינון לפי אשכול:</label>
               <select
@@ -206,6 +225,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
                 onChange={(e) => {
                   setSelectedClusterFilter(e.target.value);
                   setSelectedKitchenFilter('all');
+                  setKitchenSearchQuery('');
                 }}
                 className="bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 font-medium text-slate-800 focus:ring-2 focus:ring-purple-500 focus:outline-none"
               >
@@ -216,31 +236,56 @@ export const AdminView: React.FC<AdminViewProps> = ({
               </select>
             </div>
 
+            {/* Kitchen Filter - strictly dependent on selected cluster */}
             <div className="flex items-center gap-2">
               <label className="font-bold text-slate-700">סינון לפי מטבח:</label>
               <select
                 value={selectedKitchenFilter}
                 onChange={(e) => setSelectedKitchenFilter(e.target.value)}
-                className="bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 font-medium text-slate-800 focus:ring-2 focus:ring-purple-500 focus:outline-none max-w-[220px]"
+                className="bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 font-medium text-slate-800 focus:ring-2 focus:ring-purple-500 focus:outline-none max-w-[240px]"
               >
-                <option value="all">כל התחנות והמטבחים ({sortedKitchens.length})</option>
-                {sortedKitchens
-                  .filter(k => selectedClusterFilter === 'all' || (k.cluster || k.region) === selectedClusterFilter)
-                  .map(k => (
-                    <option key={k.id} value={String(k.id)}>
-                      {k.name} ({k.kitchenCode})
-                    </option>
-                  ))}
+                <option value="all">
+                  {selectedClusterFilter === 'all' 
+                    ? `כל התחנות והמטבחים (${sortedKitchens.length})` 
+                    : `כל מטבחי ${selectedClusterFilter} (${clusterKitchens.length})`}
+                </option>
+                {searchedClusterKitchens.map(k => (
+                  <option key={k.id} value={String(k.id)}>
+                    {formatKitchenDisplayName(k)}
+                  </option>
+                ))}
               </select>
             </div>
 
-            {(selectedClusterFilter !== 'all' || selectedKitchenFilter !== 'all') && (
+            {/* Live Search Input inside Cluster Kitchens */}
+            <div className="flex items-center gap-1.5 bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 shadow-2xs focus-within:ring-2 focus-within:ring-purple-500">
+              <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+              <input
+                type="text"
+                value={kitchenSearchQuery}
+                onChange={(e) => setKitchenSearchQuery(e.target.value)}
+                placeholder={selectedClusterFilter === 'all' ? "חיפוש תחנה / אשכול..." : `חיפוש באשכול ${selectedClusterFilter}...`}
+                className="w-36 sm:w-44 text-xs bg-transparent border-none focus:outline-hidden text-slate-800 placeholder:text-slate-400"
+              />
+              {kitchenSearchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setKitchenSearchQuery('')}
+                  className="text-slate-400 hover:text-slate-600 p-0.5"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+
+            {(selectedClusterFilter !== 'all' || selectedKitchenFilter !== 'all' || kitchenSearchQuery !== '') && (
               <button
                 onClick={() => {
                   setSelectedClusterFilter('all');
                   setSelectedKitchenFilter('all');
+                  setKitchenSearchQuery('');
                 }}
-                className="text-purple-700 hover:text-purple-900 font-bold underline px-2 py-1"
+                className="text-purple-700 hover:text-purple-900 font-bold underline px-2 py-1 cursor-pointer"
               >
                 איפוס סינונים
               </button>
@@ -251,8 +296,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
             <table className="w-full text-right text-xs">
               <thead className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200 sticky top-0 z-10 shadow-xs">
                 <tr>
-                  <th className="p-3">קוד</th>
-                  <th className="p-3">שם המטבח</th>
+                  <th className="p-3">שם התחנה המלא</th>
                   <th className="p-3">אשכול מכרז</th>
                   <th className="p-3">מחוז</th>
                   <th className="p-3">סוג ארוחה / פריט</th>
@@ -265,15 +309,14 @@ export const AdminView: React.FC<AdminViewProps> = ({
                 {filteredTariffs.slice(0, 300).map(t => {
                   const kitchen = kitchens.find(k => k.id === t.kitchenId);
                   const clusterName = t.clusterName || kitchen?.cluster || '-';
-                  const kitchenCode = t.kitchenCode || kitchen?.kitchenCode || '-';
                   const kitchenName = t.kitchenName || kitchen?.name || '-';
                   const region = t.region || kitchen?.region || '-';
                   const mealTypeName = t.mealTypeName || 'ארוחה תקנית';
+                  const fullDisplayName = formatKitchenDisplayName({ name: kitchenName, cluster: clusterName, region });
 
                   return (
                     <tr key={t.id} className="hover:bg-slate-50">
-                      <td className="p-3 font-mono font-bold text-slate-600">{kitchenCode}</td>
-                      <td className="p-3 font-bold text-slate-900">{kitchenName}</td>
+                      <td className="p-3 font-bold text-slate-900">{fullDisplayName}</td>
                       <td className="p-3">
                         <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[11px] font-medium">
                           {clusterName}

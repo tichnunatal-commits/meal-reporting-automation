@@ -13,6 +13,7 @@ import {
   ChevronLeft,
   Sparkles
 } from 'lucide-react';
+import { formatKitchenDisplayName } from './SearchableKitchenSelect';
 
 interface FoodDeptViewProps {
   currentUser: User;
@@ -141,6 +142,9 @@ export const FoodDeptView: React.FC<FoodDeptViewProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {monthlySummaries.map(s => {
             const isSelected = s.id === selectedSummaryId;
+            const kObj = kitchens.find(k => k.id === s.kitchenId);
+            const displayName = kObj ? formatKitchenDisplayName(kObj) : s.kitchenName;
+
             return (
               <div
                 key={s.id}
@@ -152,7 +156,7 @@ export const FoodDeptView: React.FC<FoodDeptViewProps> = ({
                 }`}
               >
                 <div className="flex items-center justify-between mb-2">
-                  <span className="font-bold text-sm text-slate-800">{s.kitchenName}</span>
+                  <span className="font-bold text-sm text-slate-800">{displayName}</span>
                   <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                     s.status === 'food_dept_approved' ? 'bg-emerald-100 text-emerald-800' :
                     s.status === 'ramtal_approved' ? 'bg-blue-100 text-blue-800' :
@@ -188,10 +192,7 @@ export const FoodDeptView: React.FC<FoodDeptViewProps> = ({
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h3 className="text-lg font-bold text-white">{selectedKitchen.name}</h3>
-                  <span className="bg-slate-800 text-blue-400 border border-blue-800 text-[11px] px-2 py-0.5 rounded font-mono">
-                    {selectedKitchen.kitchenCode}
-                  </span>
+                  <h3 className="text-lg font-bold text-white">{formatKitchenDisplayName(selectedKitchen)}</h3>
                 </div>
                 <p className="text-xs text-slate-400">צנרת הפעלת חוקי החישוב R1–R5 (מנוע אוטומטי שקוף)</p>
               </div>

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { DailyReportRow, Kitchen, MealType, MonthlyKitchenSummary, User } from '../types';
 import { Plus, Send, Upload, FileText, CheckCircle2, AlertTriangle, Clock, Trash2, Calendar, Utensils } from 'lucide-react';
+import { SearchableKitchenSelect, formatKitchenDisplayName } from './SearchableKitchenSelect';
 
 interface SupplierViewProps {
   currentUser: User;
@@ -34,37 +35,50 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
   const currentSummary = monthlySummaries.find(s => s.kitchenId === selectedKitchenId);
   const currentReports = dailyReports.filter(r => r.kitchenId === selectedKitchenId);
 
-  // טופס הזנה יומית
-  const [reportDate, setReportDate] = useState<string>('2026-08-11');
+  // Form states
+  const [reportDate, setReportDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [mealTypeId, setMealTypeId] = useState<number>(2);
-  const [diningHallQty, setDiningHallQty] = useState<number>(100);
-  const [takeawayQty, setTakeawayQty] = useState<number>(30);
+  const [diningHallQty, setDiningHallQty] = useState<number | ''>(100);
+  const [takeawayQty, setTakeawayQty] = useState<number | ''>(30);
   const [isSpecialEvent, setIsSpecialEvent] = useState<boolean>(false);
-  const [eventCostNis, setEventCostNis] = useState<number>(0);
+  const [eventCostNis, setEventCostNis] = useState<number | ''>(0);
   const [notes, setNotes] = useState<string>('');
+  const [uploadedFile, setUploadedFile] = useState<string>('');
   const [showUploadModal, setShowUploadModal] = useState<boolean>(false);
-  const [uploadedFile, setUploadedFile] = useState<string | null>(null);
 
   const handleAddRow = (e: React.FormEvent) => {
     e.preventDefault();
-    const mealTypeObj = mealTypes.find(m => m.id === mealTypeId);
-    const rawTotal = isSpecialEvent ? 0 : (Number(diningHallQty) + Number(takeawayQty));
+
+    const dQty = Number(diningHallQty) || 0;
+    const tQty = Number(takeawayQty) || 0;
+    const totalQty = isSpecialEvent ? 0 : dQty + tQty;
+
+    if (!isSpecialEvent && totalQty === 0) {
+      alert('נא להזין כמות ארוחות תקינה!');
+      return;
+    }
+
+    const mealType = mealTypes.find(m => m.id === mealTypeId);
 
     onAddDailyReport({
       monthlySummaryId: currentSummary?.id || 1,
       kitchenId: selectedKitchenId,
       reportDate,
-      mealTypeId,
-      mealTypeName: mealTypeObj?.nameHebrew || 'ארוחה',
-      diningHallQty: isSpecialEvent ? 0 : Number(diningHallQty),
-      takeawayQty: isSpecialEvent ? 0 : Number(takeawayQty),
-      rawReportedQty: rawTotal,
+      mealTypeId: mealTypeId,
+      mealTypeName: mealType?.nameHebrew || 'ארוחה',
+      diningHallQty: dQty,
+      takeawayQty: tQty,
+      rawReportedQty: totalQty,
       isSpecialEvent,
-      eventCostNis: isSpecialEvent ? Number(eventCostNis) : undefined,
+      eventCostNis: isSpecialEvent ? Number(eventCostNis) || 0 : undefined,
       notes: notes || undefined
     });
 
+    // Reset Form
+    setDiningHallQty('');
+    setTakeawayQty('');
     setNotes('');
+    setUploadedFile('');
     if (isSpecialEvent) {
       setIsSpecialEvent(false);
       setEventCostNis(0);
@@ -86,19 +100,14 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
           <p className="text-xs text-slate-500">הזנת נתונים יומיים מחוץ לשעון וצירוף אסמכתאות</p>
         </div>
 
-        <div className="w-full sm:w-auto">
+        <div className="w-full sm:w-80">
           <label className="block text-[11px] font-medium text-slate-600 mb-1 sm:hidden">בחר מטבח מדווח:</label>
-          <select
-            value={selectedKitchenId}
-            onChange={(e) => setSelectedKitchenId(Number(e.target.value))}
-            className="w-full sm:w-auto bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs sm:text-sm font-medium text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-          >
-            {myKitchens.map(k => (
-              <option key={k.id} value={k.id}>
-                {k.cluster ? `[${k.cluster}] ` : ''}{k.name} ({k.kitchenCode})
-              </option>
-            ))}
-          </select>
+          <SearchableKitchenSelect
+            kitchens={myKitchens}
+            selectedKitchenId={selectedKitchenId}
+            onChange={setSelectedKitchenId}
+            themeColor="blue"
+          />
         </div>
       </div>
 

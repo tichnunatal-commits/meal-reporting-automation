@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { DailyReportRow, Kitchen, MonthlyKitchenSummary, User } from '../types';
 import { CheckCircle2, RotateCcw, AlertCircle, Edit3, ShieldAlert, FileText, Check, X } from 'lucide-react';
+import { SearchableKitchenSelect, formatKitchenDisplayName } from './SearchableKitchenSelect';
 
 interface RamtalViewProps {
   currentUser: User;
@@ -68,19 +69,14 @@ export const RamtalView: React.FC<RamtalViewProps> = ({
         </div>
 
         {/* Kitchen Select */}
-        <div className="flex items-center gap-3">
-          <label className="text-xs font-medium text-slate-600">מטבח בטיפולך:</label>
-          <select
-            value={selectedKitchenId}
-            onChange={(e) => setSelectedKitchenId(Number(e.target.value))}
-            className="bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm font-medium text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-          >
-            {sortedKitchens.map(k => (
-              <option key={k.id} value={k.id}>
-                {k.cluster ? `[${k.cluster}] ` : `[${k.region}] `}{k.name} ({k.kitchenCode})
-              </option>
-            ))}
-          </select>
+        <div className="w-full md:w-80">
+          <label className="text-xs font-medium text-slate-600 block mb-1">מטבח בטיפולך:</label>
+          <SearchableKitchenSelect
+            kitchens={sortedKitchens}
+            selectedKitchenId={selectedKitchenId}
+            onChange={setSelectedKitchenId}
+            themeColor="emerald"
+          />
         </div>
       </div>
 
@@ -89,7 +85,9 @@ export const RamtalView: React.FC<RamtalViewProps> = ({
         <div className="bg-gradient-to-r from-slate-900 to-slate-800 text-white p-6 rounded-2xl shadow-md flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <h3 className="text-lg font-bold">{currentSummary.kitchenName}</h3>
+              <h3 className="text-lg font-bold">
+                {selectedKitchen ? formatKitchenDisplayName(selectedKitchen) : currentSummary.kitchenName}
+              </h3>
               <span className="bg-slate-700 text-slate-300 text-xs px-2 py-0.5 rounded font-mono">
                 {currentSummary.supplierName}
               </span>
