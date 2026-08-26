@@ -15,7 +15,7 @@ import {
   initialDailyReports,
   initialMonthlySummaries
 } from './data/mockData';
-import { DailyReportRow, Kitchen, MonthlyKitchenSummary, User } from './types';
+import { DailyReportRow, Kitchen, KitchenTariff, MonthlyKitchenSummary, User } from './types';
 import { MealCalculationEngine } from './engine/calculator';
 import {
   FileEdit,
@@ -34,8 +34,8 @@ export const App: React.FC = () => {
   });
   const [currentUser, setCurrentUser] = useState<User>(mockUsers[0]);
 
-  // תיקון 1: מתחילים עם רשימה ריקה כדי לאלץ טעינה מהשרת
   const [kitchens, setKitchens] = useState<Kitchen[]>([]);
+  const [tariffs, setTariffs] = useState<KitchenTariff[]>(mockTariffs);
   const [dailyReports, setDailyReports] = useState<DailyReportRow[]>(initialDailyReports);
   const [monthlySummaries, setMonthlySummaries] = useState<MonthlyKitchenSummary[]>(initialMonthlySummaries);
   const [activeTab, setActiveTab] = useState<'supplier' | 'ramtal' | 'food_dept' | 'clock_sync' | 'admin'>('supplier');
@@ -44,10 +44,11 @@ export const App: React.FC = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [resKitchens, resSummaries, resDaily] = await Promise.all([
+        const [resKitchens, resSummaries, resDaily, resTariffs] = await Promise.all([
           fetch(`${API_BASE}/kitchens`),
           fetch(`${API_BASE}/reports/monthly`),
-          fetch(`${API_BASE}/reports/daily`)
+          fetch(`${API_BASE}/reports/daily`),
+          fetch(`${API_BASE}/tariffs`)
         ]);
 
         if (resKitchens.ok) {
@@ -88,6 +89,25 @@ export const App: React.FC = () => {
         if (resDaily.ok) {
           const dData = await resDaily.json();
           if (dData.length > 0) setDailyReports(dData);
+        }
+
+        if (resTariffs.ok) {
+          const tData = await resTariffs.json();
+          if (tData.length > 0) {
+            setTariffs(tData.map((t: any) => ({
+              id: t.id,
+              kitchenId: t.kitchen_id,
+              kitchenName: t.kitchen_name,
+              kitchenCode: t.kitchen_code,
+              clusterName: t.cluster_name,
+              region: t.region,
+              mealTypeId: t.meal_type_id,
+              mealTypeName: t.meal_type_name,
+              priceNis: t.price_nis,
+              effectiveFrom: '2026-06-01',
+              isActive: t.is_active === 1
+            })));
+          }
         }
       } catch (err) {
         console.log('Using local fallback state:', err);
@@ -404,7 +424,7 @@ export const App: React.FC = () => {
           <FoodDeptView
             currentUser={currentUser}
             kitchens={kitchens}
-            tariffs={mockTariffs}
+            tariffs={tariffs}
             dailyReports={dailyReports}
             monthlySummaries={monthlySummaries}
             onFinalApproveSummary={handleFinalApproveSummary}
@@ -420,7 +440,7 @@ export const App: React.FC = () => {
             currentUser={currentUser}
             kitchens={kitchens}
             suppliers={mockSuppliers}
-            tariffs={mockTariffs}
+            tariffs={tariffs}
             users={mockUsers}
             onToggleKitchenActive={handleToggleKitchenActive}
           />

@@ -20,11 +20,25 @@ export const AdminView: React.FC<AdminViewProps> = ({
   onToggleKitchenActive
 }) => {
   const [activeTab, setActiveTab] = useState<'kitchens' | 'suppliers' | 'tariffs' | 'users'>('kitchens');
+  const [selectedClusterFilter, setSelectedClusterFilter] = useState<string>('all');
+  const [selectedKitchenFilter, setSelectedKitchenFilter] = useState<string>('all');
 
   const sortedKitchens = [...kitchens].sort((a, b) => {
     const clusterComp = (a.cluster || a.region || '').localeCompare(b.cluster || b.region || '', 'he');
     if (clusterComp !== 0) return clusterComp;
     return a.name.localeCompare(b.name, 'he');
+  });
+
+  const availableClusters = Array.from(new Set(
+    tariffs.map(t => t.clusterName || kitchens.find(k => k.id === t.kitchenId)?.cluster || '').filter(Boolean)
+  )).sort((a, b) => a.localeCompare(b, 'he'));
+
+  const filteredTariffs = tariffs.filter(t => {
+    const k = kitchens.find(k => k.id === t.kitchenId);
+    const cluster = t.clusterName || k?.cluster || '';
+    if (selectedClusterFilter !== 'all' && cluster !== selectedClusterFilter) return false;
+    if (selectedKitchenFilter !== 'all' && String(t.kitchenId) !== selectedKitchenFilter) return false;
+    return true;
   });
 
   return (
@@ -172,31 +186,106 @@ export const AdminView: React.FC<AdminViewProps> = ({
       )}
 
       {activeTab === 'tariffs' && (
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden p-5">
-          <h3 className="font-bold text-slate-800 text-sm mb-4">מחירונים חוזיים לפי מטבח וסוג ארוחה</h3>
-          <div className="overflow-x-auto">
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden p-5 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+            <div>
+              <h3 className="font-bold text-slate-800 text-sm">מחירונים חוזיים לפי 11 אשכולות, מטבחים וסוגי ארוחה</h3>
+              <p className="text-xs text-slate-500">מטריצת תעריפי המכרז הרשמיים, ארוחות שבת, בולים ושינוע</p>
+            </div>
+            <div className="text-xs font-semibold bg-purple-50 text-purple-700 px-3 py-1.5 rounded-lg border border-purple-200">
+              מוצגים {filteredTariffs.length.toLocaleString()} תעריפים מתוך {tariffs.length.toLocaleString()}
+            </div>
+          </div>
+
+          {/* Filter Bar */}
+          <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex flex-wrap items-center gap-3 text-xs">
+            <div className="flex items-center gap-2">
+              <label className="font-bold text-slate-700">סינון לפי אשכול:</label>
+              <select
+                value={selectedClusterFilter}
+                onChange={(e) => {
+                  setSelectedClusterFilter(e.target.value);
+                  setSelectedKitchenFilter('all');
+                }}
+                className="bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 font-medium text-slate-800 focus:ring-2 focus:ring-purple-500 focus:outline-none"
+              >
+                <option value="all">כל 11 האשכולות ({availableClusters.length})</option>
+                {availableClusters.map(c => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <label className="font-bold text-slate-700">סינון לפי מטבח:</label>
+              <select
+                value={selectedKitchenFilter}
+                onChange={(e) => setSelectedKitchenFilter(e.target.value)}
+                className="bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 font-medium text-slate-800 focus:ring-2 focus:ring-purple-500 focus:outline-none max-w-[220px]"
+              >
+                <option value="all">כל התחנות והמטבחים ({sortedKitchens.length})</option>
+                {sortedKitchens
+                  .filter(k => selectedClusterFilter === 'all' || (k.cluster || k.region) === selectedClusterFilter)
+                  .map(k => (
+                    <option key={k.id} value={String(k.id)}>
+                      {k.name} ({k.kitchenCode})
+                    </option>
+                  ))}
+              </select>
+            </div>
+
+            {(selectedClusterFilter !== 'all' || selectedKitchenFilter !== 'all') && (
+              <button
+                onClick={() => {
+                  setSelectedClusterFilter('all');
+                  setSelectedKitchenFilter('all');
+                }}
+                className="text-purple-700 hover:text-purple-900 font-bold underline px-2 py-1"
+              >
+                איפוס סינונים
+              </button>
+            )}
+          </div>
+
+          <div className="overflow-x-auto max-h-[500px]">
             <table className="w-full text-right text-xs">
-              <thead className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
+              <thead className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200 sticky top-0 z-10 shadow-xs">
                 <tr>
-                  <th className="p-3">מטבח</th>
-                  <th className="p-3">סוג ארוחה</th>
+                  <th className="p-3">קוד</th>
+                  <th className="p-3">שם המטבח</th>
+                  <th className="p-3">אשכול מכרז</th>
+                  <th className="p-3">מחוז</th>
+                  <th className="p-3">סוג ארוחה / פריט</th>
                   <th className="p-3 text-center">מחיר מנה (בש"ח)</th>
                   <th className="p-3">תוקף החל מ-</th>
-                  <th className="p-3">סטטוס</th>
+                  <th className="p-3 text-center">סטטוס</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {tariffs.map(t => {
+                {filteredTariffs.slice(0, 300).map(t => {
                   const kitchen = kitchens.find(k => k.id === t.kitchenId);
+                  const clusterName = t.clusterName || kitchen?.cluster || '-';
+                  const kitchenCode = t.kitchenCode || kitchen?.kitchenCode || '-';
+                  const kitchenName = t.kitchenName || kitchen?.name || '-';
+                  const region = t.region || kitchen?.region || '-';
+                  const mealTypeName = t.mealTypeName || 'ארוחה תקנית';
+
                   return (
                     <tr key={t.id} className="hover:bg-slate-50">
-                      <td className="p-3 font-bold text-slate-900">{kitchen?.name}</td>
-                      <td className="p-3 text-slate-700">צהריים בשרי / מנה חמה</td>
-                      <td className="p-3 text-center font-mono font-bold text-emerald-700 text-sm">
-                        ₪{t.priceNis.toFixed(2)}
-                      </td>
-                      <td className="p-3 text-slate-500 font-mono">{t.effectiveFrom}</td>
+                      <td className="p-3 font-mono font-bold text-slate-600">{kitchenCode}</td>
+                      <td className="p-3 font-bold text-slate-900">{kitchenName}</td>
                       <td className="p-3">
+                        <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[11px] font-medium">
+                          {clusterName}
+                        </span>
+                      </td>
+                      <td className="p-3 text-slate-600">{region}</td>
+                      <td className="p-3 font-semibold text-slate-800">{mealTypeName}</td>
+                      <td className="p-3 text-center font-mono font-bold text-emerald-700 text-sm">
+                        ₪{Number(t.priceNis).toFixed(2)}
+                      </td>
+                      <td className="p-3 text-slate-500 font-mono">{t.effectiveFrom || '2026-06-01'}</td>
+                      <td className="p-3 text-center">
                         <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded text-[10px] font-bold">
                           בתוקף
                         </span>
@@ -207,6 +296,11 @@ export const AdminView: React.FC<AdminViewProps> = ({
               </tbody>
             </table>
           </div>
+          {filteredTariffs.length > 300 && (
+            <p className="text-[11px] text-slate-400 text-center mt-2">
+              (מוצגות 300 השורות הראשונות מתוך {filteredTariffs.length} — השתמש בסינון לפי אשכול/מטבח לצפייה ממוקדת)
+            </p>
+          )}
         </div>
       )}
 

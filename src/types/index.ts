@@ -59,7 +59,12 @@ export interface MealType {
 export interface KitchenTariff {
   id: number;
   kitchenId: number;
+  kitchenName?: string;
+  kitchenCode?: string;
+  clusterName?: string;
+  region?: string;
   mealTypeId: number;
+  mealTypeName?: string;
   priceNis: number;
   effectiveFrom: string;
   effectiveTo?: string;

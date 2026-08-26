@@ -69,7 +69,16 @@ app.get('/api/users', (req, res) => {
 
 // --- Tariffs ---
 app.get('/api/tariffs', (req, res) => {
-  const tariffs = db.prepare('SELECT * FROM kitchen_tariffs WHERE is_active = 1').all();
+  const tariffs = db.prepare(`
+    SELECT t.id, t.kitchen_id, t.meal_type_id, t.price_nis, t.is_active,
+           k.name as kitchen_name, k.kitchen_code, k.cluster_name, k.region,
+           m.name as meal_type_name, m.item_type
+    FROM kitchen_tariffs t
+    JOIN kitchens k ON t.kitchen_id = k.id
+    JOIN meal_types m ON t.meal_type_id = m.id
+    WHERE t.is_active = 1
+    ORDER BY k.cluster_name ASC, k.name ASC, m.id ASC
+  `).all();
   res.json(tariffs);
 });
 
