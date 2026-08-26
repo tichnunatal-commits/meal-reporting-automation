@@ -52,15 +52,15 @@ export const App: React.FC = () => {
 
         if (resKitchens.ok) {
           const kData = await resKitchens.json();
-          if (kData.length > 0) {
-            setKitchens(kData.map((k: any) => ({
+            const mapped = kData.map((k: any) => ({
               id: k.id,
               kitchenCode: k.kitchen_code,
               name: k.name,
               // שיוך התחנות לספק הפעיל דוד מלכה (supplierId: 1)
               supplierId: 1,
               defaultRamtalUserId: k.default_ramtal_user_id,
-              region: k.region,
+              region: k.region || '',
+              cluster: k.cluster_name || k.cluster || '',
               isActive: k.is_active === 1,
               activeStartDate: k.active_start_date,
               effectiveEndDate: k.effective_end_date,
@@ -68,8 +68,16 @@ export const App: React.FC = () => {
               quarterlyMinimumMeals: k.quarterly_minimum_meals,
               appliesR1Machmesh: k.applies_r1_machmesh === 1,
               appliesR2Tzohar: k.applies_r2_tzohar === 1
-            })));
-          }
+            }));
+
+            // מיון אלפביתי ראשי לפי אשכול ומשני לפי שם תחנה
+            mapped.sort((a: Kitchen, b: Kitchen) => {
+              const compCluster = (a.cluster || a.region || '').localeCompare(b.cluster || b.region || '', 'he');
+              if (compCluster !== 0) return compCluster;
+              return a.name.localeCompare(b.name, 'he');
+            });
+
+            setKitchens(mapped);
         }
 
         if (resSummaries.ok) {

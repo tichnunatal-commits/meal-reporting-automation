@@ -21,6 +21,12 @@ export const AdminView: React.FC<AdminViewProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'kitchens' | 'suppliers' | 'tariffs' | 'users'>('kitchens');
 
+  const sortedKitchens = [...kitchens].sort((a, b) => {
+    const clusterComp = (a.cluster || a.region || '').localeCompare(b.cluster || b.region || '', 'he');
+    if (clusterComp !== 0) return clusterComp;
+    return a.name.localeCompare(b.name, 'he');
+  });
+
   return (
     <div className="space-y-6">
       
@@ -103,7 +109,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {kitchens.map(k => {
+                {sortedKitchens.map(k => {
                   const supplier = suppliers.find(s => s.id === k.supplierId);
                   return (
                     <tr key={k.id} className="hover:bg-slate-50">

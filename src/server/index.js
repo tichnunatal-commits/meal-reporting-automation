@@ -47,7 +47,7 @@ app.get('/api/suppliers', (req, res) => {
 
 // --- Kitchens ---
 app.get('/api/kitchens', (req, res) => {
-  const kitchens = db.prepare('SELECT * FROM kitchens').all();
+  const kitchens = db.prepare('SELECT * FROM kitchens ORDER BY cluster_name ASC, name ASC').all();
   res.json(kitchens);
 });
 
@@ -289,6 +289,21 @@ app.get('/api/export/excel', (req, res) => {
   ];
 
   const ws = XLSX.utils.aoa_to_sheet(wsData);
+// 1. הגדרת כיוון ימין-לשמאל (RTL) ברמת חוברת העבודה
+  wb.Workbook = { Views: [{ RTL: true }] };
+
+  // 2. יצירת "התאמה אוטומטית" (Auto-fit) לעמודות לפי התוכן בפועל
+  // הקוד עובר על שורת הכותרות (שורה 3 במערך wsData) ומחשב את הרוחב המקסימלי הנדרש לכל עמודה
+  const colWidths = wsData[3].map((col, index) => {
+    const maxWidth = wsData.slice(3).reduce((max, row) => {
+      const cellValue = row[index] ? row[index].toString() : "";
+      return Math.max(max, cellValue.length);
+    }, 10); // רוחב מינימלי של 10 תווים
+    return { wch: maxWidth + 3 }; // תוספת של 3 תווים למרווח נשימה אסתטי
+  });
+  
+  ws['!cols'] = colWidths;
+
   XLSX.utils.book_append_sheet(wb, ws, 'סיכום לתשלום');
 
   const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });

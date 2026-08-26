@@ -21,7 +21,12 @@ export const RamtalView: React.FC<RamtalViewProps> = ({
   onReturnSummary,
   onAdjustDailyRow
 }) => {
-  const [selectedKitchenId, setSelectedKitchenId] = useState<number>(kitchens[0]?.id || 1);
+  const sortedKitchens = [...kitchens].sort((a, b) => {
+    const clusterComp = (a.cluster || a.region || '').localeCompare(b.cluster || b.region || '', 'he');
+    if (clusterComp !== 0) return clusterComp;
+    return a.name.localeCompare(b.name, 'he');
+  });
+  const [selectedKitchenId, setSelectedKitchenId] = useState<number>(sortedKitchens[0]?.id || 1);
   const [returnReasonModal, setReturnReasonModal] = useState<boolean>(false);
   const [returnText, setReturnText] = useState<string>('');
 
@@ -70,9 +75,9 @@ export const RamtalView: React.FC<RamtalViewProps> = ({
             onChange={(e) => setSelectedKitchenId(Number(e.target.value))}
             className="bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm font-medium text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
           >
-            {kitchens.map(k => (
+            {sortedKitchens.map(k => (
               <option key={k.id} value={k.id}>
-                {k.name} ({k.region})
+                {k.cluster ? `[${k.cluster}] ` : `[${k.region}] `}{k.name} ({k.kitchenCode})
               </option>
             ))}
           </select>

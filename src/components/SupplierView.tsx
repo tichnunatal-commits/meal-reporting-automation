@@ -22,7 +22,12 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
   onSubmitMonth,
 }) => {
   const filteredKitchens = kitchens.filter(k => k.supplierId === currentUser.supplierId);
-  const myKitchens = filteredKitchens.length > 0 ? filteredKitchens : kitchens;
+  const rawKitchens = filteredKitchens.length > 0 ? filteredKitchens : kitchens;
+  const myKitchens = [...rawKitchens].sort((a, b) => {
+    const clusterComp = (a.cluster || a.region || '').localeCompare(b.cluster || b.region || '', 'he');
+    if (clusterComp !== 0) return clusterComp;
+    return a.name.localeCompare(b.name, 'he');
+  });
   const [selectedKitchenId, setSelectedKitchenId] = useState<number>(myKitchens[0]?.id || 1);
 
   const selectedKitchen = kitchens.find(k => k.id === selectedKitchenId);
@@ -90,7 +95,7 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
           >
             {myKitchens.map(k => (
               <option key={k.id} value={k.id}>
-                {k.name} ({k.kitchenCode})
+                {k.cluster ? `[${k.cluster}] ` : ''}{k.name} ({k.kitchenCode})
               </option>
             ))}
           </select>
