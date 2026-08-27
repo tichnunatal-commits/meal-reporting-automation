@@ -1,6 +1,6 @@
 {
   "hosting": {
-    "site": "pol-meal-reporting",
+    "site": "meal-reporting-app",
     "public": "dist",
     "ignore": [
       "firebase.json",
@@ -15,3 +15,4 @@
     ]
   }
 }
+

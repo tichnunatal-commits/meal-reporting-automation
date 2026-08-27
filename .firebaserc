@@ -1,14 +1,5 @@
 {
   "projects": {
-    "default": "michraz-police-ai-add58"
-  },
-  "targets": {
-    "michraz-police-ai-add58": {
-      "hosting": {
-        "pol-meal-reporting": [
-          "pol-meal-reporting"
-        ]
-      }
-    }
+    "default": "meal-reporting-app"
   }
 }
