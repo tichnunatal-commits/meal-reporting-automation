@@ -73,13 +73,90 @@ export const App: React.FC = () => {
 
   const { isAuthenticated, currentUser, isSuperAdmin } = authSession;
 
-  const [kitchens, setKitchens] = useState<Kitchen[]>([]);
+  const [kitchens, setKitchens] = useState<Kitchen[]>(mockKitchens);
   const [tariffs, setTariffs] = useState<KitchenTariff[]>(mockTariffs);
   const [dailyReports, setDailyReports] = useState<DailyReportRow[]>(initialDailyReports);
   const [monthlySummaries, setMonthlySummaries] = useState<MonthlyKitchenSummary[]>(initialMonthlySummaries);
   const [activeTab, setActiveTab] = useState<TabKey>('supplier');
 
   const allowedTabs = getAllowedTabsForRole(currentUser.role);
+
+  // טעינה מיידית של נתוני 134 התחנות והתעריפים מהשרת
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [resKitchens, resSummaries, resDaily, resTariffs] = await Promise.all([
+          fetch(`${API_BASE}/kitchens`),
+          fetch(`${API_BASE}/reports/monthly`),
+          fetch(`${API_BASE}/reports/daily`),
+          fetch(`${API_BASE}/tariffs`)
+        ]);
+
+        if (resKitchens.ok) {
+          const kData = await resKitchens.json();
+          if (Array.isArray(kData) && kData.length > 0) {
+            const mapped = kData.map((k: any) => ({
+              id: k.id,
+              kitchenCode: k.kitchen_code,
+              name: k.name,
+              supplierId: 1,
+              defaultRamtalUserId: k.default_ramtal_user_id,
+              region: k.region || '',
+              cluster: k.cluster_name || k.cluster || '',
+              isActive: k.is_active === 1,
+              activeStartDate: k.active_start_date,
+              effectiveEndDate: k.effective_end_date,
+              hasQuarterlyMinimum: k.has_quarterly_minimum === 1,
+              quarterlyMinimumMeals: k.quarterly_minimum_meals,
+              appliesR1Machmesh: k.applies_r1_machmesh === 1,
+              appliesR2Tzohar: k.applies_r2_tzohar === 1
+            }));
+
+            mapped.sort((a: Kitchen, b: Kitchen) => {
+              const compCluster = (a.cluster || a.region || '').localeCompare(b.cluster || b.region || '', 'he');
+              if (compCluster !== 0) return compCluster;
+              return a.name.localeCompare(b.name, 'he');
+            });
+
+            setKitchens(mapped);
+          }
+        }
+
+        if (resSummaries.ok) {
+          const sData = await resSummaries.json();
+          if (Array.isArray(sData) && sData.length > 0) setMonthlySummaries(sData);
+        }
+
+        if (resDaily.ok) {
+          const dData = await resDaily.json();
+          if (Array.isArray(dData) && dData.length > 0) setDailyReports(dData);
+        }
+
+        if (resTariffs.ok) {
+          const tData = await resTariffs.json();
+          if (Array.isArray(tData) && tData.length > 0) {
+            setTariffs(tData.map((t: any) => ({
+              id: t.id,
+              kitchenId: t.kitchen_id,
+              kitchenName: t.kitchen_name,
+              kitchenCode: t.kitchen_code,
+              clusterName: t.cluster_name,
+              region: t.region,
+              mealTypeId: t.meal_type_id,
+              mealTypeName: t.meal_type_name,
+              priceNis: t.price_nis,
+              effectiveFrom: '2026-06-01',
+              isActive: t.is_active === 1
+            })));
+          }
+        }
+      } catch (err) {
+        console.log('Backend fetch warning, preserving active state:', err);
+      }
+    };
+
+    fetchData();
+  }, [isAuthenticated]);
 
   // אכיפת הרשאות RBAC: העברה אוטומטית לטאב המורשה הראשון אם הטאב הנוכחי אינו מורשה
   useEffect(() => {
