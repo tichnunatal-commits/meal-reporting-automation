@@ -234,7 +234,57 @@ export const App: React.FC = () => {
     }));
   };
 
+  const handleUpdateDailyReport = (updatedRow: DailyReportRow) => {
+    setDailyReports(prev => prev.map(r => r.id === updatedRow.id ? updatedRow : r));
+    setMonthlySummaries(prev => prev.map(s => {
+      if (s.kitchenId === updatedRow.kitchenId) {
+        const kitchenRows = dailyReports.map(r => r.id === updatedRow.id ? updatedRow : r).filter(r => r.kitchenId === updatedRow.kitchenId);
+        const sum = kitchenRows.reduce((acc, curr) => acc + (curr.rawReportedQty || 0), 0);
+        return { ...s, totalReportedRaw: sum, totalRamtalApproved: sum };
+      }
+      return s;
+    }));
+  };
+
+  const handleDuplicateDailyReport = (rowId: number) => {
+    const target = dailyReports.find(r => r.id === rowId);
+    if (!target) return;
+
+    const duplicated: DailyReportRow = {
+      ...target,
+      id: Date.now(),
+      reportDate: new Date().toISOString().split('T')[0],
+      notes: target.notes ? `${target.notes} (משוכפל)` : 'משוכפל'
+    };
+
+    setDailyReports(prev => [duplicated, ...prev]);
+
+    setMonthlySummaries(prev => prev.map(s => {
+      if (s.kitchenId === target.kitchenId) {
+        const sum = s.totalReportedRaw + duplicated.rawReportedQty;
+        return { ...s, totalReportedRaw: sum, totalRamtalApproved: sum };
+      }
+      return s;
+    }));
+  };
+
+  const handleDeleteDailyReport = (rowId: number) => {
+    const target = dailyReports.find(r => r.id === rowId);
+    if (!target) return;
+
+    setDailyReports(prev => prev.filter(r => r.id !== rowId));
+
+    setMonthlySummaries(prev => prev.map(s => {
+      if (s.kitchenId === target.kitchenId) {
+        const sum = Math.max(0, s.totalReportedRaw - target.rawReportedQty);
+        return { ...s, totalReportedRaw: sum, totalRamtalApproved: sum };
+      }
+      return s;
+    }));
+  };
+
   const handleSubmitMonth = async (summaryId: number) => {
+
     try {
       await fetch(`${API_BASE}/reports/submit-month`, {
         method: 'POST',
@@ -547,8 +597,12 @@ export const App: React.FC = () => {
             dailyReports={dailyReports}
             monthlySummaries={monthlySummaries}
             onAddDailyReport={handleAddDailyReport}
+            onUpdateDailyReport={handleUpdateDailyReport}
+            onDuplicateDailyReport={handleDuplicateDailyReport}
+            onDeleteDailyReport={handleDeleteDailyReport}
             onSubmitMonth={handleSubmitMonth}
           />
+
         )}
 
         {activeTab === 'ramtal' && (
