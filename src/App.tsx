@@ -28,6 +28,24 @@ import {
 
 const API_BASE = 'http://127.0.0.1:3001/api';
 
+export type TabKey = 'supplier' | 'ramtal' | 'food_dept' | 'clock_sync' | 'admin';
+
+export const getAllowedTabsForRole = (role: string): TabKey[] => {
+  switch (role) {
+    case 'supplier_reporter':
+      return ['supplier'];
+    case 'police_ramtal':
+      return ['ramtal'];
+    case 'food_dept_reviewer':
+      return ['ramtal', 'food_dept', 'clock_sync'];
+    case 'viewer_finance':
+      return ['food_dept', 'clock_sync'];
+    case 'system_admin':
+    default:
+      return ['supplier', 'ramtal', 'food_dept', 'clock_sync', 'admin'];
+  }
+};
+
 export const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     return sessionStorage.getItem('police_meal_gate_session_v2') === 'authenticated';
@@ -38,7 +56,18 @@ export const App: React.FC = () => {
   const [tariffs, setTariffs] = useState<KitchenTariff[]>(mockTariffs);
   const [dailyReports, setDailyReports] = useState<DailyReportRow[]>(initialDailyReports);
   const [monthlySummaries, setMonthlySummaries] = useState<MonthlyKitchenSummary[]>(initialMonthlySummaries);
-  const [activeTab, setActiveTab] = useState<'supplier' | 'ramtal' | 'food_dept' | 'clock_sync' | 'admin'>('supplier');
+  const [activeTab, setActiveTab] = useState<TabKey>('supplier');
+
+  const allowedTabs = getAllowedTabsForRole(currentUser.role);
+
+  // אכיפת הרשאות RBAC: העברה אוטומטית לטאב המורשה הראשון אם הטאב הנוכחי אינו מורשה
+  useEffect(() => {
+    if (!allowedTabs.includes(activeTab)) {
+      if (allowedTabs.length > 0) {
+        setActiveTab(allowedTabs[0]);
+      }
+    }
+  }, [currentUser.role, activeTab]);
 
   // Load data from Backend API on mount
   useEffect(() => {
@@ -119,11 +148,10 @@ export const App: React.FC = () => {
 
   const handleSelectUser = (user: User) => {
     setCurrentUser(user);
-    if (user.role === 'supplier_reporter') setActiveTab('supplier');
-    else if (user.role === 'police_ramtal') setActiveTab('ramtal');
-    else if (user.role === 'food_dept_reviewer') setActiveTab('food_dept');
-    else if (user.role === 'viewer_finance') setActiveTab('clock_sync');
-    else if (user.role === 'system_admin') setActiveTab('admin');
+    const userAllowed = getAllowedTabsForRole(user.role);
+    if (userAllowed.length > 0) {
+      setActiveTab(userAllowed[0]);
+    }
   };
 
   const handleAddDailyReport = async (newRow: Omit<DailyReportRow, 'id'>) => {
@@ -321,65 +349,75 @@ export const App: React.FC = () => {
           <div className="flex items-center justify-between h-12">
 
             <div className="flex items-center space-x-1 space-x-reverse overflow-x-auto">
-              <button
-                onClick={() => setActiveTab('supplier')}
-                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition ${
-                  activeTab === 'supplier'
-                    ? 'bg-blue-600 text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                }`}
-              >
-                <FileEdit className="w-4 h-4" />
-                <span>1. דיווח ספק הסעדה</span>
-              </button>
+              {allowedTabs.includes('supplier') && (
+                <button
+                  onClick={() => setActiveTab('supplier')}
+                  className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition ${
+                    activeTab === 'supplier'
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  }`}
+                >
+                  <FileEdit className="w-4 h-4" />
+                  <span>1. דיווח ספק הסעדה</span>
+                </button>
+              )}
 
-              <button
-                onClick={() => setActiveTab('ramtal')}
-                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition ${
-                  activeTab === 'ramtal'
-                    ? 'bg-emerald-600 text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                }`}
-              >
-                <CheckCircle2 className="w-4 h-4" />
-                <span>2. אישור רמת"ל משטרתי</span>
-              </button>
+              {allowedTabs.includes('ramtal') && (
+                <button
+                  onClick={() => setActiveTab('ramtal')}
+                  className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition ${
+                    activeTab === 'ramtal'
+                      ? 'bg-emerald-600 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  }`}
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>2. אישור רמת"ל משטרתי</span>
+                </button>
+              )}
 
-              <button
-                onClick={() => setActiveTab('food_dept')}
-                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition ${
-                  activeTab === 'food_dept'
-                    ? 'bg-indigo-700 text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                }`}
-              >
-                <BarChart3 className="w-4 h-4" />
-                <span>3. בקרת מדור מזון (R1–R5)</span>
-              </button>
+              {allowedTabs.includes('food_dept') && (
+                <button
+                  onClick={() => setActiveTab('food_dept')}
+                  className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition ${
+                    activeTab === 'food_dept'
+                      ? 'bg-indigo-700 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  }`}
+                >
+                  <BarChart3 className="w-4 h-4" />
+                  <span>3. בקרת מדור מזון (R1–R5)</span>
+                </button>
+              )}
 
-              <button
-                onClick={() => setActiveTab('clock_sync')}
-                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition ${
-                  activeTab === 'clock_sync'
-                    ? 'bg-amber-600 text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                }`}
-              >
-                <Clock className="w-4 h-4" />
-                <span>4. הצלבת שעון נוכחות</span>
-              </button>
+              {allowedTabs.includes('clock_sync') && (
+                <button
+                  onClick={() => setActiveTab('clock_sync')}
+                  className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition ${
+                    activeTab === 'clock_sync'
+                      ? 'bg-amber-600 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  }`}
+                >
+                  <Clock className="w-4 h-4" />
+                  <span>4. הצלבת שעון נוכחות</span>
+                </button>
+              )}
 
-              <button
-                onClick={() => setActiveTab('admin')}
-                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition ${
-                  activeTab === 'admin'
-                    ? 'bg-purple-700 text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                }`}
-              >
-                <Settings className="w-4 h-4" />
-                <span>5. הגדרות מערכת ואדמין</span>
-              </button>
+              {allowedTabs.includes('admin') && (
+                <button
+                  onClick={() => setActiveTab('admin')}
+                  className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition ${
+                    activeTab === 'admin'
+                      ? 'bg-purple-700 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  }`}
+                >
+                  <Settings className="w-4 h-4" />
+                  <span>5. הגדרות מערכת ואדמין</span>
+                </button>
+              )}
             </div>
 
             {/* Role indicator tag */}
@@ -388,6 +426,11 @@ export const App: React.FC = () => {
               <strong className="text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
                 {currentUser.fullName}
               </strong>
+              {currentUser.role === 'viewer_finance' && (
+                <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                  צפייה בלבד (Read-Only)
+                </span>
+              )}
             </div>
 
           </div>

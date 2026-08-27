@@ -198,7 +198,12 @@ export const FoodDeptView: React.FC<FoodDeptViewProps> = ({
               </div>
             </div>
 
-            {selectedSummary.status !== 'food_dept_approved' ? (
+            {currentUser.role === 'viewer_finance' ? (
+              <div className="flex items-center gap-2 bg-slate-800 border border-slate-700 text-slate-300 text-xs px-4 py-2.5 rounded-xl">
+                <Lock className="w-4 h-4 text-amber-400" />
+                <span>מצב צפייה בלבד (חשבות / גזברות)</span>
+              </div>
+            ) : selectedSummary.status !== 'food_dept_approved' ? (
               <button
                 onClick={() => onFinalApproveSummary(selectedSummary.id)}
                 className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold px-5 py-2.5 rounded-xl shadow-lg transition"

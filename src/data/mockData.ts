@@ -3,8 +3,8 @@ import { Kitchen, Supplier, User, MealType, KitchenTariff, MonthlyKitchenSummary
 export const mockUsers: User[] = [
   {
     id: 1,
-    username: 'supplier_gourmet',
-    fullName: 'דוד מלכה (נציג קייטרינג גורמה)',
+    username: 'supplier_david',
+    fullName: 'דוד מלכה (נציג ספק הסעדה)',
     role: 'supplier_reporter',
     supplierId: 1,
     email: 'david@gourmet-catering.co.il',
@@ -13,8 +13,8 @@ export const mockUsers: User[] = [
   },
   {
     id: 2,
-    username: 'ramtal_jerusalem',
-    fullName: 'רנ"ג אבי לוי (רמת"ל מרחב ציון / ירושלים)',
+    username: 'ramtal_avi',
+    fullName: 'רס"ג אבי לוי (רמת"ל משטרתי)',
     role: 'police_ramtal',
     email: 'avi.levi@police.gov.il',
     phone: '052-9876543',
@@ -31,19 +31,20 @@ export const mockUsers: User[] = [
   },
   {
     id: 4,
-    username: 'admin_zeev',
-    fullName: 'רפ"ק זאב נאורי (ר\' חוליית התייעלות - מנהל מערכת)',
-    role: 'system_admin',
-    email: 'zeev.neori@police.gov.il',
-    phone: '050-8889999',
+    username: 'finance_dana',
+    fullName: 'דנה שפירא (חשבות / גזברות)',
+    role: 'viewer_finance',
+    email: 'dana.finance@police.gov.il',
+    phone: '054-3334455',
     isActive: true
   },
   {
     id: 5,
-    username: 'finance_gizbarut',
-    fullName: 'דנה שפירא (חשבות וגזברות את"ל)',
-    role: 'viewer_finance',
-    email: 'dana.finance@police.gov.il',
+    username: 'admin_zeev',
+    fullName: 'רפ"ק זאב נאורי (מנהל מערכת)',
+    role: 'system_admin',
+    email: 'zeev.neori@police.gov.il',
+    phone: '050-8889999',
     isActive: true
   }
 ];
