@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Kitchen, KitchenTariff, Supplier, User } from '../types';
-import { Settings, Shield, Plus, Building, UserPlus, FileKey, CheckCircle2, AlertCircle, Search, X } from 'lucide-react';
+import { Settings, Shield, Plus, Building, UserPlus, FileKey, CheckCircle2, AlertCircle, Search, X, Edit2, Check } from 'lucide-react';
 import { formatKitchenDisplayName } from './SearchableKitchenSelect';
 
 interface AdminViewProps {
@@ -10,6 +10,7 @@ interface AdminViewProps {
   tariffs: KitchenTariff[];
   users: User[];
   onToggleKitchenActive: (kitchenId: number) => void;
+  onUpdateTariff?: (tariffId: number, newPriceNis: number) => Promise<void> | void;
 }
 
 export const AdminView: React.FC<AdminViewProps> = ({
@@ -18,13 +19,49 @@ export const AdminView: React.FC<AdminViewProps> = ({
   suppliers,
   tariffs,
   users,
-  onToggleKitchenActive
+  onToggleKitchenActive,
+  onUpdateTariff
 }) => {
   const [activeTab, setActiveTab] = useState<'kitchens' | 'suppliers' | 'tariffs' | 'users'>('kitchens');
   const [selectedClusterFilter, setSelectedClusterFilter] = useState<string>('all');
   const [selectedKitchenFilter, setSelectedKitchenFilter] = useState<string>('all');
   const [selectedMealTypeFilter, setSelectedMealTypeFilter] = useState<string>('all');
   const [kitchenSearchQuery, setKitchenSearchQuery] = useState<string>('');
+
+  const [editingTariffId, setEditingTariffId] = useState<number | null>(null);
+  const [editingPrice, setEditingPrice] = useState<string>('');
+  const [successToast, setSuccessToast] = useState<string | null>(null);
+  const [isSavingTariff, setIsSavingTariff] = useState<boolean>(false);
+
+  const startEditTariff = (tariff: KitchenTariff) => {
+    setEditingTariffId(tariff.id);
+    setEditingPrice(String(tariff.priceNis));
+  };
+
+  const cancelEditTariff = () => {
+    setEditingTariffId(null);
+    setEditingPrice('');
+  };
+
+  const saveTariff = async (tariffId: number) => {
+    const numVal = Number(editingPrice);
+    if (isNaN(numVal) || numVal < 0) return;
+
+    setIsSavingTariff(true);
+    try {
+      if (onUpdateTariff) {
+        await onUpdateTariff(tariffId, numVal);
+      }
+      setSuccessToast('המחיר עודכן ונשמר בהצלחה במסד הנתונים');
+      setEditingTariffId(null);
+      setEditingPrice('');
+      setTimeout(() => setSuccessToast(null), 6000);
+    } catch (err) {
+      console.error('Error saving tariff:', err);
+    } finally {
+      setIsSavingTariff(false);
+    }
+  };
 
   const sortedKitchens = [...kitchens].sort((a, b) => {
     const clusterComp = (a.cluster || a.region || '').localeCompare(b.cluster || b.region || '', 'he');
@@ -315,6 +352,22 @@ export const AdminView: React.FC<AdminViewProps> = ({
             )}
           </div>
 
+          {/* Toast Notification Banner */}
+          {successToast && (
+            <div className="bg-emerald-50 border border-emerald-300 text-emerald-800 px-4 py-3 rounded-xl mb-4 flex items-center justify-between text-xs font-bold shadow-xs">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4.5 h-4.5 text-emerald-600 shrink-0" />
+                <span>{successToast}</span>
+              </div>
+              <button
+                onClick={() => setSuccessToast(null)}
+                className="text-emerald-600 hover:text-emerald-800 p-1 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
           <div className="overflow-x-auto max-h-[500px]">
             <table className="w-full text-right text-xs">
               <thead className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200 sticky top-0 z-10 shadow-xs">
@@ -326,6 +379,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
                   <th className="p-3 text-center">מחיר מנה (בש"ח)</th>
                   <th className="p-3">תוקף החל מ-</th>
                   <th className="p-3 text-center">סטטוס</th>
+                  <th className="p-3 text-center">פעולות</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -336,9 +390,10 @@ export const AdminView: React.FC<AdminViewProps> = ({
                   const region = t.region || kitchen?.region || '-';
                   const mealTypeName = t.mealTypeName || 'ארוחה תקנית';
                   const fullDisplayName = formatKitchenDisplayName({ name: kitchenName, cluster: clusterName, region });
+                  const isEditing = editingTariffId === t.id;
 
                   return (
-                    <tr key={t.id} className="hover:bg-slate-50">
+                    <tr key={t.id} className={isEditing ? 'bg-amber-50/70' : 'hover:bg-slate-50'}>
                       <td className="p-3 font-bold text-slate-900">{fullDisplayName}</td>
                       <td className="p-3">
                         <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[11px] font-medium">
@@ -347,14 +402,65 @@ export const AdminView: React.FC<AdminViewProps> = ({
                       </td>
                       <td className="p-3 text-slate-600">{region}</td>
                       <td className="p-3 font-semibold text-slate-800">{mealTypeName}</td>
+                      
+                      {/* Editable Price cell */}
                       <td className="p-3 text-center font-mono font-bold text-emerald-700 text-sm">
-                        ₪{Number(t.priceNis).toFixed(2)}
+                        {isEditing ? (
+                          <div className="flex items-center justify-center gap-1">
+                            <span className="text-slate-500 text-xs">₪</span>
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={editingPrice}
+                              onChange={(e) => setEditingPrice(e.target.value)}
+                              className="w-24 bg-white border-2 border-emerald-500 rounded px-2 py-1 text-center font-bold text-slate-900 focus:outline-none"
+                              autoFocus
+                            />
+                          </div>
+                        ) : (
+                          `₪${Number(t.priceNis).toFixed(2)}`
+                        )}
                       </td>
+                      
                       <td className="p-3 text-slate-500 font-mono">{t.effectiveFrom || '2026-06-01'}</td>
+                      
                       <td className="p-3 text-center">
                         <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded text-[10px] font-bold">
                           בתוקף
                         </span>
+                      </td>
+
+                      {/* Actions Column */}
+                      <td className="p-3 text-center">
+                        {isEditing ? (
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              onClick={() => saveTariff(t.id)}
+                              disabled={isSavingTariff}
+                              className="p-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-xs flex items-center gap-1 transition cursor-pointer shadow-xs disabled:opacity-50"
+                              title="שמור מחיר מעודכן"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                              <span>שמור</span>
+                            </button>
+                            <button
+                              onClick={cancelEditTariff}
+                              className="p-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-xs transition cursor-pointer"
+                              title="בטל עריכה"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => startEditTariff(t)}
+                            className="inline-flex items-center gap-1 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer"
+                            title="ערוך מחיר מנה"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                            <span>ערוך</span>
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );
@@ -362,6 +468,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
               </tbody>
             </table>
           </div>
+
           {filteredTariffs.length > 300 && (
             <p className="text-[11px] text-slate-400 text-center mt-2">
               (מוצגות 300 השורות הראשונות מתוך {filteredTariffs.length} — השתמש בסינון לפי אשכול/מטבח לצפייה ממוקדת)

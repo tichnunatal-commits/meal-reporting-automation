@@ -361,6 +361,20 @@ export const App: React.FC = () => {
     }));
   };
 
+  const handleUpdateTariff = async (tariffId: number, newPriceNis: number) => {
+    try {
+      await fetch(`${API_BASE}/tariffs/${tariffId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ priceNis: newPriceNis })
+      });
+    } catch (e) {
+      console.error('API update tariff error, updating local state:', e);
+    }
+
+    setTariffs(prev => prev.map(t => t.id === tariffId ? { ...t, priceNis: newPriceNis } : t));
+  };
+
   const handleLockSystem = () => {
     handleLogout();
   };
@@ -527,6 +541,7 @@ export const App: React.FC = () => {
             tariffs={tariffs}
             users={mockUsers}
             onToggleKitchenActive={handleToggleKitchenActive}
+            onUpdateTariff={handleUpdateTariff}
           />
         )}
       </main>

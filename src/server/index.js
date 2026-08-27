@@ -82,6 +82,38 @@ app.get('/api/tariffs', (req, res) => {
   res.json(tariffs);
 });
 
+app.put('/api/tariffs/:id', (req, res) => {
+  const { id } = req.params;
+  const { priceNis } = req.body;
+  if (priceNis === undefined || isNaN(Number(priceNis))) {
+    return res.status(400).json({ error: 'Valid priceNis is required' });
+  }
+
+  const numPrice = Number(priceNis);
+  const info = db.prepare('UPDATE kitchen_tariffs SET price_nis = ? WHERE id = ?').run(numPrice, id);
+  if (info.changes === 0) {
+    return res.status(404).json({ error: 'Tariff record not found' });
+  }
+
+  res.json({ success: true, id: Number(id), priceNis: numPrice });
+});
+
+app.put('/api/kitchen-tariffs/:id', (req, res) => {
+  const { id } = req.params;
+  const { priceNis } = req.body;
+  if (priceNis === undefined || isNaN(Number(priceNis))) {
+    return res.status(400).json({ error: 'Valid priceNis is required' });
+  }
+
+  const numPrice = Number(priceNis);
+  const info = db.prepare('UPDATE kitchen_tariffs SET price_nis = ? WHERE id = ?').run(numPrice, id);
+  if (info.changes === 0) {
+    return res.status(404).json({ error: 'Tariff record not found' });
+  }
+
+  res.json({ success: true, id: Number(id), priceNis: numPrice });
+});
+
 // --- Monthly Summaries ---
 app.get('/api/reports/monthly', (req, res) => {
   const summaries = db.prepare(`
