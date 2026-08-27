@@ -3,7 +3,7 @@ import { Kitchen, Supplier, User, MealType, KitchenTariff, MonthlyKitchenSummary
 export const mockUsers: User[] = [
   {
     id: 1,
-    username: 'supplier_david',
+    username: 'David',
     fullName: 'דוד מלכה (נציג ספק הסעדה)',
     role: 'supplier_reporter',
     supplierId: 1,
@@ -13,7 +13,7 @@ export const mockUsers: User[] = [
   },
   {
     id: 2,
-    username: 'ramtal_avi',
+    username: 'Avi',
     fullName: 'רס"ג אבי לוי (רמת"ל משטרתי)',
     role: 'police_ramtal',
     email: 'avi.levi@police.gov.il',
@@ -22,7 +22,7 @@ export const mockUsers: User[] = [
   },
   {
     id: 3,
-    username: 'food_dept_arik',
+    username: 'Arik',
     fullName: 'רס"ב אריק כרמי (נציג מדור מזון)',
     role: 'food_dept_reviewer',
     email: 'arik.karmi@police.gov.il',
@@ -31,7 +31,7 @@ export const mockUsers: User[] = [
   },
   {
     id: 4,
-    username: 'finance_dana',
+    username: 'Dana',
     fullName: 'דנה שפירא (חשבות / גזברות)',
     role: 'viewer_finance',
     email: 'dana.finance@police.gov.il',
@@ -40,7 +40,7 @@ export const mockUsers: User[] = [
   },
   {
     id: 5,
-    username: 'admin_zeev',
+    username: 'zeev',
     fullName: 'רפ"ק זאב נאורי (מנהל מערכת)',
     role: 'system_admin',
     email: 'zeev.neori@police.gov.il',
