@@ -1,20 +1,29 @@
 import React, { useState } from 'react';
 import { User } from '../types';
 import { mockUsers } from '../data/mockData';
-import { ShieldCheck, UserCheck, Calendar, ChevronDown, Lock } from 'lucide-react';
+import { ShieldCheck, UserCheck, Calendar, Lock, LogOut } from 'lucide-react';
 
 interface HeaderProps {
   currentUser: User;
   onSelectUser: (user: User) => void;
   selectedPeriod: { month: number; year: number };
   onLockSystem?: () => void;
+  onLogout: () => void;
+  isSuperAdmin: boolean;
 }
 
-export const Header: React.FC<HeaderProps> = ({ currentUser, onSelectUser, selectedPeriod, onLockSystem }) => {
+export const Header: React.FC<HeaderProps> = ({ 
+  currentUser, 
+  onSelectUser, 
+  selectedPeriod, 
+  onLockSystem,
+  onLogout,
+  isSuperAdmin
+}) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
-    <header className="bg-slate-900 text-white border-b border-slate-800 sticky top-0 z-50 shadow-md">
+    <header className="bg-slate-900 text-white border-b border-slate-800 sticky top-0 z-50 shadow-md" dir="rtl">
       <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between min-h-[60px] py-2">
           
@@ -31,6 +40,11 @@ export const Header: React.FC<HeaderProps> = ({ currentUser, onSelectUser, selec
                 <span className="bg-blue-900/90 text-blue-300 text-[10px] px-1.5 py-0.5 rounded font-medium border border-blue-700/50 hidden xs:inline-block">
                   מחוץ לשעון
                 </span>
+                {isSuperAdmin && (
+                  <span className="bg-purple-900/90 text-purple-200 text-[10px] px-2 py-0.5 rounded font-bold border border-purple-700">
+                    Super-Admin (מצב הדגמה)
+                  </span>
+                )}
               </div>
               <p className="text-[10px] sm:text-xs text-slate-400 truncate">
                 מיכון ובקרת כמויות ארוחות
@@ -48,102 +62,62 @@ export const Header: React.FC<HeaderProps> = ({ currentUser, onSelectUser, selec
               <strong className="text-white font-semibold">08/{selectedPeriod.year}</strong>
             </div>
 
-            {/* Persona Switcher */}
-            <div className="flex items-center gap-2 bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700">
-              <UserCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-              <div className="text-xs text-right">
-                <div className="text-slate-400 text-[10px] leading-tight">החלף תפקיד:</div>
-                <select
-                  value={currentUser.id}
-                  onChange={(e) => {
-                    const found = mockUsers.find(u => u.id === Number(e.target.value));
-                    if (found) onSelectUser(found);
-                  }}
-                  className="bg-transparent text-white font-medium text-xs focus:outline-none cursor-pointer pr-1"
-                >
-                  {mockUsers.map((u) => (
-                    <option key={u.id} value={u.id} className="bg-slate-800 text-white">
-                      {u.fullName}
-                    </option>
-                  ))}
-                </select>
+            {/* Role Switcher Dropdown — ONLY rendered in Super-Admin mode */}
+            {isSuperAdmin ? (
+              <div className="flex items-center gap-2 bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700">
+                <UserCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+                <div className="text-xs text-right">
+                  <div className="text-slate-400 text-[10px] leading-tight">החלף תפקיד (בלייב):</div>
+                  <select
+                    value={currentUser.id}
+                    onChange={(e) => {
+                      const found = mockUsers.find(u => u.id === Number(e.target.value));
+                      if (found) onSelectUser(found);
+                    }}
+                    className="bg-transparent text-white font-medium text-xs focus:outline-none cursor-pointer pr-1"
+                  >
+                    {mockUsers.map((u) => (
+                      <option key={u.id} value={u.id} className="bg-slate-800 text-white">
+                        {u.fullName}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
-            </div>
-
-            {/* Lock Button */}
-            {onLockSystem && (
-              <button
-                onClick={onLockSystem}
-                title="נעילת מסך וחזרה למסך סיסמה"
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-red-950/60 hover:text-red-300 border border-slate-700 hover:border-red-800 text-slate-400 text-xs rounded-lg transition"
-              >
-                <Lock className="w-3.5 h-3.5 text-slate-400" />
-                <span>נעילה</span>
-              </button>
+            ) : (
+              /* Single User Display Badge for End Users (No Role Switcher in DOM) */
+              <div className="flex items-center gap-2 bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700 text-xs text-slate-200">
+                <UserCheck className="w-4 h-4 text-blue-400 shrink-0" />
+                <span>מחובר כעת:</span>
+                <strong className="text-white font-bold">{currentUser.fullName}</strong>
+              </div>
             )}
+
+            {/* Logout Button */}
+            <button
+              onClick={onLogout}
+              title="התנתקות מהמערכת וחזרה למסך הכניסה"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-red-950/60 hover:bg-red-900 border border-red-800/80 hover:border-red-600 text-red-200 text-xs font-bold rounded-lg transition cursor-pointer shadow-xs"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span>התנתק</span>
+            </button>
 
           </div>
 
-          {/* Mobile Toggle Button */}
+          {/* Mobile Actions */}
           <div className="flex items-center gap-2 md:hidden">
-            {onLockSystem && (
-              <button
-                onClick={onLockSystem}
-                className="p-1.5 bg-slate-800 border border-slate-700 text-slate-400 rounded-lg"
-              >
-                <Lock className="w-3.5 h-3.5" />
-              </button>
-            )}
             <button
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="flex items-center gap-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs px-2.5 py-1.5 rounded-lg transition"
+              onClick={onLogout}
+              title="התנתק"
+              className="p-1.5 bg-red-950/80 border border-red-800 text-red-300 rounded-lg text-xs font-bold flex items-center gap-1"
             >
-              <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="max-w-[100px] truncate text-[11px] font-medium">{currentUser.fullName.split(' ')[0]}</span>
-              <ChevronDown className={`w-3 h-3 transition-transform ${mobileMenuOpen ? 'rotate-180' : ''}`} />
+              <LogOut className="w-3.5 h-3.5" />
+              <span>התנתק</span>
             </button>
           </div>
 
         </div>
-
-        {/* Mobile Dropdown Panel */}
-        {mobileMenuOpen && (
-          <div className="md:hidden py-3 border-t border-slate-800 space-y-2.5 bg-slate-900/95 animate-fade-in">
-            <div className="flex items-center justify-between text-xs text-slate-400 px-1">
-              <span>תקופת דיווח: <strong className="text-white">אוגוסט {selectedPeriod.year} (08/{selectedPeriod.year})</strong></span>
-              <span className="bg-blue-900 text-blue-300 text-[10px] px-2 py-0.5 rounded">בלמ"ס</span>
-            </div>
-
-            <div className="bg-slate-800/90 p-2.5 rounded-xl border border-slate-700">
-              <label className="text-[11px] font-medium text-slate-400 block mb-1.5">
-                בחר משתמש / תפקיד להתנסות:
-              </label>
-              <div className="space-y-1">
-                {mockUsers.map((u) => {
-                  const isSelected = u.id === currentUser.id;
-                  return (
-                    <button
-                      key={u.id}
-                      onClick={() => {
-                        onSelectUser(u);
-                        setMobileMenuOpen(false);
-                      }}
-                      className={`w-full text-right px-2.5 py-2 rounded-lg text-xs font-medium flex items-center justify-between transition ${
-                        isSelected 
-                          ? 'bg-blue-600 text-white font-bold' 
-                          : 'text-slate-300 hover:bg-slate-700/60'
-                      }`}
-                    >
-                      <span className="truncate">{u.fullName}</span>
-                      {isSelected && <span className="text-[10px] bg-blue-800 px-1.5 py-0.5 rounded">פעיל</span>}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        )}
-
       </div>
     </header>
   );
