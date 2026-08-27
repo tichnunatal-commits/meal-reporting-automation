@@ -2,13 +2,13 @@ import { db } from './db.js';
 import { runImport } from './importData.js';
 
 export function seedDatabase() {
-  // בדיקה אם כבר קיימות התחנות שיובאו
+  // בדיקה אם קיימות 124 התחנות הסופיות
   const kitchenCount = db.prepare('SELECT count(*) as count FROM kitchens').get().count;
-  if (kitchenCount < 10) {
-    console.log('מסד הנתונים חסר תחנות. מפעיל ייבוא של 134 התחנות...');
+  if (kitchenCount !== 124) {
+    console.log('מסד הנתונים מתעדכן ל-124 התחנות הסופיות מקובץ האקסל...');
     runImport();
   } else {
-    console.log(`מסד הנתונים מכיל ${kitchenCount} תחנות ויחידות משטרה. שומר על הנתונים.`);
+    console.log(`מסד הנתונים מכיל ${kitchenCount} תחנות מעודכנות בסדר מופתי.`);
   }
 
   // ווידוא משתמשים (RBAC)
