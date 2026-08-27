@@ -46,8 +46,39 @@ export const mockUsers: User[] = [
     email: 'zeev.neori@police.gov.il',
     phone: '050-8889999',
     isActive: true
+  },
+  {
+    id: 6,
+    username: 'Ronit',
+    fullName: 'רונית ששון (נציגת מבושלת בע"מ)',
+    role: 'supplier_reporter',
+    supplierId: 2,
+    email: 'ronit@mevushelet.co.il',
+    phone: '054-2223344',
+    isActive: true
+  },
+  {
+    id: 7,
+    username: 'Yossi',
+    fullName: 'יוסי ליבר (נציג קייטרינג ליבר)',
+    role: 'supplier_reporter',
+    supplierId: 3,
+    email: 'yossi@liber-food.co.il',
+    phone: '052-3334455',
+    isActive: true
+  },
+  {
+    id: 8,
+    username: 'Ilan',
+    fullName: 'אילן מזרחי (נציג סודקסו ישראל)',
+    role: 'supplier_reporter',
+    supplierId: 4,
+    email: 'ilan@sodexo.co.il',
+    phone: '052-4445566',
+    isActive: true
   }
 ];
+
 
 export const mockSuppliers: Supplier[] = [
   {

@@ -23,8 +23,11 @@ import {
   BarChart3,
   Settings,
   Clock,
-  Sparkles
+  Sparkles,
+  UserCheck,
+  X
 } from 'lucide-react';
+
 
 const API_BASE = 'http://127.0.0.1:3001/api';
 
@@ -158,6 +161,8 @@ export const App: React.FC = () => {
     fetchData();
   }, [isAuthenticated]);
 
+  const [welcomeBanner, setWelcomeBanner] = useState<string | null>(null);
+
   // אכיפת הרשאות RBAC: העברה אוטומטית לטאב המורשה הראשון אם הטאב הנוכחי אינו מורשה
   useEffect(() => {
     if (isAuthenticated && !allowedTabs.includes(activeTab)) {
@@ -174,7 +179,13 @@ export const App: React.FC = () => {
     if (allowed.length > 0) {
       setActiveTab(allowed[0]);
     }
+
+    // Clean user full name for greeting (e.g. 'דוד מלכה' out of 'דוד מלכה (נציג ספק הסעדה)')
+    const cleanName = user.fullName.split(' (')[0];
+    setWelcomeBanner(`ברוך הבא, ${cleanName}!`);
+    setTimeout(() => setWelcomeBanner(null), 6000);
   };
+
 
   const handleLogout = () => {
     localStorage.removeItem(AUTH_STORAGE_KEY);
@@ -507,8 +518,28 @@ export const App: React.FC = () => {
       )}
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 relative">
+        {/* Welcome Toast Notification Banner */}
+        {welcomeBanner && (
+          <div className="fixed top-20 left-4 sm:left-8 z-50 bg-gradient-to-r from-blue-700 via-indigo-700 to-purple-800 text-white px-5 py-3.5 rounded-2xl shadow-2xl border border-blue-400/40 flex items-center gap-3">
+            <div className="p-2 bg-white/20 rounded-xl shrink-0">
+              <UserCheck className="w-5 h-5 text-blue-100" />
+            </div>
+            <div>
+              <div className="text-[11px] text-blue-200 font-medium">התחברות מאובטחת בוצעה בהצלחה</div>
+              <div className="text-sm font-bold">{welcomeBanner}</div>
+            </div>
+            <button
+              onClick={() => setWelcomeBanner(null)}
+              className="mr-2 text-blue-200 hover:text-white p-1 cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
         {activeTab === 'supplier' && (
+
           <SupplierView
             currentUser={currentUser}
             kitchens={kitchens}
