@@ -375,6 +375,20 @@ export const App: React.FC = () => {
     setTariffs(prev => prev.map(t => t.id === tariffId ? { ...t, priceNis: newPriceNis } : t));
   };
 
+  const handleUpdateGlobalTariff = async (mealTypeId: number, newPriceNis: number) => {
+    try {
+      await fetch(`${API_BASE}/global-tariffs/${mealTypeId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ priceNis: newPriceNis })
+      });
+    } catch (e) {
+      console.error('API update global tariff error, updating local state:', e);
+    }
+
+    setTariffs(prev => prev.map(t => t.mealTypeId === mealTypeId ? { ...t, priceNis: newPriceNis } : t));
+  };
+
   const handleLockSystem = () => {
     handleLogout();
   };
@@ -542,6 +556,7 @@ export const App: React.FC = () => {
             users={mockUsers}
             onToggleKitchenActive={handleToggleKitchenActive}
             onUpdateTariff={handleUpdateTariff}
+            onUpdateGlobalTariff={handleUpdateGlobalTariff}
           />
         )}
       </main>

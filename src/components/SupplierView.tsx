@@ -182,11 +182,18 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
                   setMealTypeId(id);
                   setIsSpecialEvent(id === 5);
                 }}
-                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs sm:text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs sm:text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none font-medium"
               >
-                {mealTypes.map(m => (
-                  <option key={m.id} value={m.id}>{m.nameHebrew}</option>
-                ))}
+                <optgroup label="--- 7 ארוחות בסיס ומכרז (לפי אשכול התחנה) ---">
+                  {mealTypes.filter(m => m.id <= 7).map(m => (
+                    <option key={m.id} value={m.id}>{m.nameHebrew}</option>
+                  ))}
+                </optgroup>
+                <optgroup label="--- 11 תוספות, נילווים ומארזים כלל-ארציים ---">
+                  {mealTypes.filter(m => m.id >= 8).map(m => (
+                    <option key={m.id} value={m.id}>{m.nameHebrew}</option>
+                  ))}
+                </optgroup>
               </select>
             </div>
           </div>

@@ -114,6 +114,22 @@ app.put('/api/kitchen-tariffs/:id', (req, res) => {
   res.json({ success: true, id: Number(id), priceNis: numPrice });
 });
 
+app.put('/api/global-tariffs/:id', (req, res) => {
+  const { id } = req.params;
+  const { priceNis } = req.body;
+  if (priceNis === undefined || isNaN(Number(priceNis))) {
+    return res.status(400).json({ error: 'Valid priceNis is required' });
+  }
+
+  const numPrice = Number(priceNis);
+  const mealTypeId = Number(id);
+
+  db.prepare('UPDATE kitchen_tariffs SET price_nis = ? WHERE meal_type_id = ?').run(numPrice, mealTypeId);
+  db.prepare('UPDATE meal_types SET fixed_price_nis = ? WHERE id = ?').run(numPrice, mealTypeId);
+
+  res.json({ success: true, mealTypeId, priceNis: numPrice });
+});
+
 // --- Monthly Summaries ---
 app.get('/api/reports/monthly', (req, res) => {
   const summaries = db.prepare(`

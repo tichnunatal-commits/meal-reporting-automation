@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Kitchen, KitchenTariff, Supplier, User } from '../types';
-import { Settings, Shield, Plus, Building, UserPlus, FileKey, CheckCircle2, AlertCircle, Search, X, Edit2, Check } from 'lucide-react';
+import { Settings, Shield, Plus, Building, UserPlus, FileKey, CheckCircle2, AlertCircle, Search, X, Edit2, Check, Layers, Globe } from 'lucide-react';
 import { formatKitchenDisplayName } from './SearchableKitchenSelect';
 
 interface AdminViewProps {
@@ -11,7 +11,22 @@ interface AdminViewProps {
   users: User[];
   onToggleKitchenActive: (kitchenId: number) => void;
   onUpdateTariff?: (tariffId: number, newPriceNis: number) => Promise<void> | void;
+  onUpdateGlobalTariff?: (mealTypeId: number, newPriceNis: number) => Promise<void> | void;
 }
+
+const GLOBAL_ADDONS_DEF = [
+  { id: 8, name: 'בולים (בולי מזון)', itemType: 'תוספת מזון', defaultPrice: 37.77 },
+  { id: 9, name: 'שינוע חם', itemType: 'שירות לוגיסטי', defaultPrice: 8.31 },
+  { id: 10, name: 'שינוע קר', itemType: 'שירות לוגיסטי', defaultPrice: 14.83 },
+  { id: 11, name: 'תוספת חלבון', itemType: 'תוספת מזון', defaultPrice: 6.00 },
+  { id: 12, name: 'חמגשית (3 תאים)', itemType: 'מארז / אריזה', defaultPrice: 20.00 },
+  { id: 13, name: 'נלווה לחמגשית', itemType: 'נילווה', defaultPrice: 12.00 },
+  { id: 14, name: 'ארוחת ביניים ולילה', itemType: 'ארוחה קלה', defaultPrice: 5.00 },
+  { id: 15, name: 'חמגשית עצור', itemType: 'מארז ייעודי', defaultPrice: 25.00 },
+  { id: 16, name: 'מארז בוקר', itemType: 'מארז ארוחה', defaultPrice: 17.00 },
+  { id: 17, name: 'מארז בשרי / פרווה', itemType: 'מארז ארוחה', defaultPrice: 25.00 },
+  { id: 18, name: 'ערכות סימני חג', itemType: 'ערכת חג', defaultPrice: 80.00 }
+];
 
 export const AdminView: React.FC<AdminViewProps> = ({
   currentUser,
@@ -20,9 +35,12 @@ export const AdminView: React.FC<AdminViewProps> = ({
   tariffs,
   users,
   onToggleKitchenActive,
-  onUpdateTariff
+  onUpdateTariff,
+  onUpdateGlobalTariff
 }) => {
   const [activeTab, setActiveTab] = useState<'kitchens' | 'suppliers' | 'tariffs' | 'users'>('kitchens');
+  const [tariffSubTab, setTariffSubTab] = useState<'station_tariffs' | 'global_addons'>('station_tariffs');
+
   const [selectedClusterFilter, setSelectedClusterFilter] = useState<string>('all');
   const [selectedKitchenFilter, setSelectedKitchenFilter] = useState<string>('all');
   const [selectedMealTypeFilter, setSelectedMealTypeFilter] = useState<string>('all');
@@ -30,6 +48,10 @@ export const AdminView: React.FC<AdminViewProps> = ({
 
   const [editingTariffId, setEditingTariffId] = useState<number | null>(null);
   const [editingPrice, setEditingPrice] = useState<string>('');
+
+  const [editingGlobalMealTypeId, setEditingGlobalMealTypeId] = useState<number | null>(null);
+  const [editingGlobalPrice, setEditingGlobalPrice] = useState<string>('');
+
   const [successToast, setSuccessToast] = useState<string | null>(null);
   const [isSavingTariff, setIsSavingTariff] = useState<boolean>(false);
 
@@ -63,18 +85,51 @@ export const AdminView: React.FC<AdminViewProps> = ({
     }
   };
 
+  const startEditGlobalTariff = (mealTypeId: number, currentPrice: number) => {
+    setEditingGlobalMealTypeId(mealTypeId);
+    setEditingGlobalPrice(String(currentPrice));
+  };
+
+  const cancelEditGlobalTariff = () => {
+    setEditingGlobalMealTypeId(null);
+    setEditingGlobalPrice('');
+  };
+
+  const saveGlobalTariff = async (mealTypeId: number) => {
+    const numVal = Number(editingGlobalPrice);
+    if (isNaN(numVal) || numVal < 0) return;
+
+    setIsSavingTariff(true);
+    try {
+      if (onUpdateGlobalTariff) {
+        await onUpdateGlobalTariff(mealTypeId, numVal);
+      }
+      setSuccessToast('תעריף התוספת הארצי עודכן ונשמר בהצלחה לכלל המדינה ב-Database');
+      setEditingGlobalMealTypeId(null);
+      setEditingGlobalPrice('');
+      setTimeout(() => setSuccessToast(null), 6000);
+    } catch (err) {
+      console.error('Error saving global tariff:', err);
+    } finally {
+      setIsSavingTariff(false);
+    }
+  };
+
   const sortedKitchens = [...kitchens].sort((a, b) => {
     const clusterComp = (a.cluster || a.region || '').localeCompare(b.cluster || b.region || '', 'he');
     if (clusterComp !== 0) return clusterComp;
     return a.name.localeCompare(b.name, 'he');
   });
 
+  // 7 ארוחות בסיס ומכרז המשתנות לפי אשכול (mealTypeId <= 7) -> 124 תחנות x 7 = 868 שורות
+  const stationBaseTariffs = tariffs.filter(t => t.mealTypeId <= 7);
+
   const availableClusters = Array.from(new Set(
-    tariffs.map(t => t.clusterName || kitchens.find(k => k.id === t.kitchenId)?.cluster || '').filter(Boolean)
+    stationBaseTariffs.map(t => t.clusterName || kitchens.find(k => k.id === t.kitchenId)?.cluster || '').filter(Boolean)
   )).sort((a, b) => a.localeCompare(b, 'he'));
 
   const availableMealTypes = Array.from(new Set(
-    tariffs.map(t => t.mealTypeName || '').filter(Boolean)
+    stationBaseTariffs.map(t => t.mealTypeName || '').filter(Boolean)
   )).sort((a, b) => a.localeCompare(b, 'he'));
 
   // תלות סינון: מטבחי האשכול הנבחר בלבד
@@ -88,7 +143,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
     return k.name.toLowerCase().includes(q) || (k.cluster || '').toLowerCase().includes(q);
   });
 
-  const filteredTariffs = tariffs.filter(t => {
+  const filteredStationTariffs = stationBaseTariffs.filter(t => {
     const k = kitchens.find(k => k.id === t.kitchenId);
     const cluster = t.clusterName || k?.cluster || '';
     if (selectedClusterFilter !== 'all' && cluster !== selectedClusterFilter) return false;
@@ -103,6 +158,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
     }
     return true;
   });
+
 
   return (
     <div className="space-y-6">
@@ -249,112 +305,45 @@ export const AdminView: React.FC<AdminViewProps> = ({
 
       {activeTab === 'tariffs' && (
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden p-5 space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+          
+          {/* Tariffs Header with Sub-tabs Navigation */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-100 pb-4">
             <div>
-              <h3 className="font-bold text-slate-800 text-sm">מחירונים חוזיים לפי 11 אשכולות, מטבחים וסוגי ארוחה</h3>
-              <p className="text-xs text-slate-500">מטריצת תעריפי המכרז הרשמיים, ארוחות שבת, בולים ושינוע</p>
-            </div>
-            <div className="text-xs font-semibold bg-purple-50 text-purple-700 px-3 py-1.5 rounded-lg border border-purple-200">
-              מוצגים {filteredTariffs.length.toLocaleString()} תעריפים מתוך {tariffs.length.toLocaleString()}
-            </div>
-          </div>
-
-          {/* Filter Bar */}
-          <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex flex-wrap items-center gap-3 text-xs">
-            {/* Cluster Filter */}
-            <div className="flex items-center gap-2">
-              <label className="font-bold text-slate-700">סינון לפי אשכול:</label>
-              <select
-                value={selectedClusterFilter}
-                onChange={(e) => {
-                  setSelectedClusterFilter(e.target.value);
-                  setSelectedKitchenFilter('all');
-                  setKitchenSearchQuery('');
-                }}
-                className="bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 font-medium text-slate-800 focus:ring-2 focus:ring-purple-500 focus:outline-none"
-              >
-                <option value="all">כל 11 האשכולות ({availableClusters.length})</option>
-                {availableClusters.map(c => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
+              <h3 className="font-bold text-slate-800 text-sm">ניהול מחירוני המערכת והרשאות תעריפים</h3>
+              <p className="text-xs text-slate-500">הפרדה מלאה בין תעריפי אשכולות ותחנות לבין תוספות ונילווים כלל-ארציים במחיר קבוע</p>
             </div>
 
-            {/* Kitchen Filter - strictly dependent on selected cluster */}
-            <div className="flex items-center gap-2">
-              <label className="font-bold text-slate-700">סינון לפי מטבח:</label>
-              <select
-                value={selectedKitchenFilter}
-                onChange={(e) => setSelectedKitchenFilter(e.target.value)}
-                className="bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 font-medium text-slate-800 focus:ring-2 focus:ring-purple-500 focus:outline-none max-w-[240px]"
-              >
-                <option value="all">
-                  {selectedClusterFilter === 'all' 
-                    ? `כל התחנות והמטבחים (${sortedKitchens.length})` 
-                    : `כל מטבחי ${selectedClusterFilter} (${clusterKitchens.length})`}
-                </option>
-                {searchedClusterKitchens.map(k => (
-                  <option key={k.id} value={String(k.id)}>
-                    {formatKitchenDisplayName(k)}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Meal Type Filter */}
-            <div className="flex items-center gap-2">
-              <label className="font-bold text-slate-700">סוג ארוחה:</label>
-              <select
-                value={selectedMealTypeFilter}
-                onChange={(e) => setSelectedMealTypeFilter(e.target.value)}
-                className="bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 font-medium text-slate-800 focus:ring-2 focus:ring-purple-500 focus:outline-none max-w-[200px]"
-              >
-                <option value="all">כל סוגי הארוחות ({availableMealTypes.length})</option>
-                {availableMealTypes.map(m => (
-                  <option key={m} value={m}>{m}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Live Search Input inside Cluster Kitchens */}
-            <div className="flex items-center gap-1.5 bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 shadow-2xs focus-within:ring-2 focus-within:ring-purple-500">
-              <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-              <input
-                type="text"
-                value={kitchenSearchQuery}
-                onChange={(e) => setKitchenSearchQuery(e.target.value)}
-                placeholder={selectedClusterFilter === 'all' ? "חיפוש תחנה / אשכול..." : `חיפוש באשכול ${selectedClusterFilter}...`}
-                className="w-36 sm:w-44 text-xs bg-transparent border-none focus:outline-hidden text-slate-800 placeholder:text-slate-400"
-              />
-              {kitchenSearchQuery && (
-                <button
-                  type="button"
-                  onClick={() => setKitchenSearchQuery('')}
-                  className="text-slate-400 hover:text-slate-600 p-0.5"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              )}
-            </div>
-
-            {(selectedClusterFilter !== 'all' || selectedKitchenFilter !== 'all' || selectedMealTypeFilter !== 'all' || kitchenSearchQuery !== '') && (
+            {/* Sub-tabs Selector */}
+            <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-bold">
               <button
-                onClick={() => {
-                  setSelectedClusterFilter('all');
-                  setSelectedKitchenFilter('all');
-                  setSelectedMealTypeFilter('all');
-                  setKitchenSearchQuery('');
-                }}
-                className="text-purple-700 hover:text-purple-900 font-bold underline px-2 py-1 cursor-pointer"
+                onClick={() => setTariffSubTab('station_tariffs')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition cursor-pointer ${
+                  tariffSubTab === 'station_tariffs'
+                    ? 'bg-purple-700 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                }`}
               >
-                איפוס סינונים
+                <Layers className="w-3.5 h-3.5" />
+                <span>1. תעריפי אשכולות ותחנות (868)</span>
               </button>
-            )}
+
+              <button
+                onClick={() => setTariffSubTab('global_addons')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition cursor-pointer ${
+                  tariffSubTab === 'global_addons'
+                    ? 'bg-purple-700 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                }`}
+              >
+                <Globe className="w-3.5 h-3.5" />
+                <span>2. תוספות ונילווים ארציים (11)</span>
+              </button>
+            </div>
           </div>
 
-          {/* Toast Notification Banner */}
+          {/* Success Toast Notification Banner */}
           {successToast && (
-            <div className="bg-emerald-50 border border-emerald-300 text-emerald-800 px-4 py-3 rounded-xl mb-4 flex items-center justify-between text-xs font-bold shadow-xs">
+            <div className="bg-emerald-50 border border-emerald-300 text-emerald-800 px-4 py-3 rounded-xl mb-2 flex items-center justify-between text-xs font-bold shadow-xs">
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="w-4.5 h-4.5 text-emerald-600 shrink-0" />
                 <span>{successToast}</span>
@@ -368,114 +357,323 @@ export const AdminView: React.FC<AdminViewProps> = ({
             </div>
           )}
 
-          <div className="overflow-x-auto max-h-[500px]">
-            <table className="w-full text-right text-xs">
-              <thead className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200 sticky top-0 z-10 shadow-xs">
-                <tr>
-                  <th className="p-3">שם התחנה המלא</th>
-                  <th className="p-3">אשכול מכרז</th>
-                  <th className="p-3">מחוז</th>
-                  <th className="p-3">סוג ארוחה / פריט</th>
-                  <th className="p-3 text-center">מחיר מנה (בש"ח)</th>
-                  <th className="p-3">תוקף החל מ-</th>
-                  <th className="p-3 text-center">סטטוס</th>
-                  <th className="p-3 text-center">פעולות</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filteredTariffs.slice(0, 300).map(t => {
-                  const kitchen = kitchens.find(k => k.id === t.kitchenId);
-                  const clusterName = t.clusterName || kitchen?.cluster || '-';
-                  const kitchenName = t.kitchenName || kitchen?.name || '-';
-                  const region = t.region || kitchen?.region || '-';
-                  const mealTypeName = t.mealTypeName || 'ארוחה תקנית';
-                  const fullDisplayName = formatKitchenDisplayName({ name: kitchenName, cluster: clusterName, region });
-                  const isEditing = editingTariffId === t.id;
+          {/* SUB-TAB 1: Station Base Tariffs (868 rows) */}
+          {tariffSubTab === 'station_tariffs' && (
+            <div className="space-y-4">
+              {/* Filter Bar */}
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex flex-wrap items-center gap-3 text-xs">
+                {/* Cluster Filter */}
+                <div className="flex items-center gap-2">
+                  <label className="font-bold text-slate-700">סינון לפי אשכול:</label>
+                  <select
+                    value={selectedClusterFilter}
+                    onChange={(e) => {
+                      setSelectedClusterFilter(e.target.value);
+                      setSelectedKitchenFilter('all');
+                      setKitchenSearchQuery('');
+                    }}
+                    className="bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 font-medium text-slate-800 focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                  >
+                    <option value="all">כל 13 האשכולות ({availableClusters.length})</option>
+                    {availableClusters.map(c => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </div>
 
-                  return (
-                    <tr key={t.id} className={isEditing ? 'bg-amber-50/70' : 'hover:bg-slate-50'}>
-                      <td className="p-3 font-bold text-slate-900">{fullDisplayName}</td>
-                      <td className="p-3">
-                        <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[11px] font-medium">
-                          {clusterName}
-                        </span>
-                      </td>
-                      <td className="p-3 text-slate-600">{region}</td>
-                      <td className="p-3 font-semibold text-slate-800">{mealTypeName}</td>
-                      
-                      {/* Editable Price cell */}
-                      <td className="p-3 text-center font-mono font-bold text-emerald-700 text-sm">
-                        {isEditing ? (
-                          <div className="flex items-center justify-center gap-1">
-                            <span className="text-slate-500 text-xs">₪</span>
-                            <input
-                              type="number"
-                              step="0.01"
-                              value={editingPrice}
-                              onChange={(e) => setEditingPrice(e.target.value)}
-                              className="w-24 bg-white border-2 border-emerald-500 rounded px-2 py-1 text-center font-bold text-slate-900 focus:outline-none"
-                              autoFocus
-                            />
-                          </div>
-                        ) : (
-                          `₪${Number(t.priceNis).toFixed(2)}`
-                        )}
-                      </td>
-                      
-                      <td className="p-3 text-slate-500 font-mono">{t.effectiveFrom || '2026-06-01'}</td>
-                      
-                      <td className="p-3 text-center">
-                        <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded text-[10px] font-bold">
-                          בתוקף
-                        </span>
-                      </td>
+                {/* Kitchen Filter */}
+                <div className="flex items-center gap-2">
+                  <label className="font-bold text-slate-700">סינון לפי מטבח:</label>
+                  <select
+                    value={selectedKitchenFilter}
+                    onChange={(e) => setSelectedKitchenFilter(e.target.value)}
+                    className="bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 font-medium text-slate-800 focus:ring-2 focus:ring-purple-500 focus:outline-none max-w-[240px]"
+                  >
+                    <option value="all">
+                      {selectedClusterFilter === 'all' 
+                        ? `כל התחנות והמטבחים (${sortedKitchens.length})` 
+                        : `כל מטבחי ${selectedClusterFilter} (${clusterKitchens.length})`}
+                    </option>
+                    {searchedClusterKitchens.map(k => (
+                      <option key={k.id} value={String(k.id)}>
+                        {formatKitchenDisplayName(k)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-                      {/* Actions Column */}
-                      <td className="p-3 text-center">
-                        {isEditing ? (
-                          <div className="flex items-center justify-center gap-1">
-                            <button
-                              onClick={() => saveTariff(t.id)}
-                              disabled={isSavingTariff}
-                              className="p-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-xs flex items-center gap-1 transition cursor-pointer shadow-xs disabled:opacity-50"
-                              title="שמור מחיר מעודכן"
-                            >
-                              <Check className="w-3.5 h-3.5" />
-                              <span>שמור</span>
-                            </button>
-                            <button
-                              onClick={cancelEditTariff}
-                              className="p-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-xs transition cursor-pointer"
-                              title="בטל עריכה"
-                            >
-                              <X className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => startEditTariff(t)}
-                            className="inline-flex items-center gap-1 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer"
-                            title="ערוך מחיר מנה"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                            <span>ערוך</span>
-                          </button>
-                        )}
-                      </td>
+                {/* Meal Type Filter */}
+                <div className="flex items-center gap-2">
+                  <label className="font-bold text-slate-700">סוג ארוחת בסיס:</label>
+                  <select
+                    value={selectedMealTypeFilter}
+                    onChange={(e) => setSelectedMealTypeFilter(e.target.value)}
+                    className="bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 font-medium text-slate-800 focus:ring-2 focus:ring-purple-500 focus:outline-none max-w-[200px]"
+                  >
+                    <option value="all">כל 7 ארוחות הבסיס ({availableMealTypes.length})</option>
+                    {availableMealTypes.map(m => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Live Search Input */}
+                <div className="flex items-center gap-1.5 bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 shadow-2xs focus-within:ring-2 focus-within:ring-purple-500">
+                  <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                  <input
+                    type="text"
+                    value={kitchenSearchQuery}
+                    onChange={(e) => setKitchenSearchQuery(e.target.value)}
+                    placeholder={selectedClusterFilter === 'all' ? "חיפוש תחנה / אשכול..." : `חיפוש באשכול ${selectedClusterFilter}...`}
+                    className="w-36 sm:w-44 text-xs bg-transparent border-none focus:outline-hidden text-slate-800 placeholder:text-slate-400"
+                  />
+                  {kitchenSearchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setKitchenSearchQuery('')}
+                      className="text-slate-400 hover:text-slate-600 p-0.5"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+
+                {(selectedClusterFilter !== 'all' || selectedKitchenFilter !== 'all' || selectedMealTypeFilter !== 'all' || kitchenSearchQuery !== '') && (
+                  <button
+                    onClick={() => {
+                      setSelectedClusterFilter('all');
+                      setSelectedKitchenFilter('all');
+                      setSelectedMealTypeFilter('all');
+                      setKitchenSearchQuery('');
+                    }}
+                    className="text-purple-700 hover:text-purple-900 font-bold underline px-2 py-1 cursor-pointer"
+                  >
+                    איפוס סינונים
+                  </button>
+                )}
+              </div>
+
+              <div className="overflow-x-auto max-h-[500px]">
+                <table className="w-full text-right text-xs">
+                  <thead className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200 sticky top-0 z-10 shadow-xs">
+                    <tr>
+                      <th className="p-3">שם התחנה המלא</th>
+                      <th className="p-3">אשכול מכרז</th>
+                      <th className="p-3">מחוז</th>
+                      <th className="p-3">סוג ארוחת בסיס</th>
+                      <th className="p-3 text-center">מחיר מנה (בש"ח)</th>
+                      <th className="p-3">תוקף החל מ-</th>
+                      <th className="p-3 text-center">סטטוס</th>
+                      <th className="p-3 text-center">פעולות</th>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredStationTariffs.slice(0, 300).map(t => {
+                      const kitchen = kitchens.find(k => k.id === t.kitchenId);
+                      const clusterName = t.clusterName || kitchen?.cluster || '-';
+                      const kitchenName = t.kitchenName || kitchen?.name || '-';
+                      const region = t.region || kitchen?.region || '-';
+                      const mealTypeName = t.mealTypeName || 'ארוחה תקנית';
+                      const fullDisplayName = formatKitchenDisplayName({ name: kitchenName, cluster: clusterName, region });
+                      const isEditing = editingTariffId === t.id;
 
-          {filteredTariffs.length > 300 && (
-            <p className="text-[11px] text-slate-400 text-center mt-2">
-              (מוצגות 300 השורות הראשונות מתוך {filteredTariffs.length} — השתמש בסינון לפי אשכול/מטבח לצפייה ממוקדת)
-            </p>
+                      return (
+                        <tr key={t.id} className={isEditing ? 'bg-amber-50/70' : 'hover:bg-slate-50'}>
+                          <td className="p-3 font-bold text-slate-900">{fullDisplayName}</td>
+                          <td className="p-3">
+                            <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[11px] font-medium">
+                              {clusterName}
+                            </span>
+                          </td>
+                          <td className="p-3 text-slate-600">{region}</td>
+                          <td className="p-3 font-semibold text-slate-800">{mealTypeName}</td>
+                          
+                          {/* Editable Price cell */}
+                          <td className="p-3 text-center font-mono font-bold text-emerald-700 text-sm">
+                            {isEditing ? (
+                              <div className="flex items-center justify-center gap-1">
+                                <span className="text-slate-500 text-xs">₪</span>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  value={editingPrice}
+                                  onChange={(e) => setEditingPrice(e.target.value)}
+                                  className="w-24 bg-white border-2 border-emerald-500 rounded px-2 py-1 text-center font-bold text-slate-900 focus:outline-none"
+                                  autoFocus
+                                />
+                              </div>
+                            ) : (
+                              `₪${Number(t.priceNis).toFixed(2)}`
+                            )}
+                          </td>
+                          
+                          <td className="p-3 text-slate-500 font-mono">{t.effectiveFrom || '2026-06-01'}</td>
+                          
+                          <td className="p-3 text-center">
+                            <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded text-[10px] font-bold">
+                              בתוקף
+                            </span>
+                          </td>
+
+                          {/* Actions Column */}
+                          <td className="p-3 text-center">
+                            {isEditing ? (
+                              <div className="flex items-center justify-center gap-1">
+                                <button
+                                  onClick={() => saveTariff(t.id)}
+                                  disabled={isSavingTariff}
+                                  className="p-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-xs flex items-center gap-1 transition cursor-pointer shadow-xs disabled:opacity-50"
+                                  title="שמור מחיר מעודכן"
+                                >
+                                  <Check className="w-3.5 h-3.5" />
+                                  <span>שמור</span>
+                                </button>
+                                <button
+                                  onClick={cancelEditTariff}
+                                  className="p-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-xs transition cursor-pointer"
+                                  title="בטל עריכה"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => startEditTariff(t)}
+                                className="inline-flex items-center gap-1 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer"
+                                title="ערוך מחיר מנה"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                                <span>ערוך</span>
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {filteredStationTariffs.length > 300 && (
+                <p className="text-[11px] text-slate-400 text-center mt-2">
+                  (מוצגות 300 השורות הראשונות מתוך {filteredStationTariffs.length} — השתמש בסינון לפי אשכול/מטבח לצפייה ממוקדת)
+                </p>
+              )}
+            </div>
           )}
+
+          {/* SUB-TAB 2: Global Addons & Extras (Clean 11 rows) */}
+          {tariffSubTab === 'global_addons' && (
+            <div className="space-y-4">
+              <div className="bg-purple-50/80 border border-purple-200 rounded-xl p-4 text-xs text-purple-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h4 className="font-bold text-sm text-purple-950 mb-1">ניהול ארצי מרכזי של תוספות ונילווים</h4>
+                  <p>11 הפריטים במחיר קבוע תקפים באופן אחיד לכל 124 התחנות ו-13 האשכולות. עריכת מחיר כאן מעדכנת את התעריף הארצי לכל המדינה בבת אחת ב-Database.</p>
+                </div>
+                <span className="bg-purple-700 text-white px-3.5 py-1.5 rounded-lg font-bold text-xs shrink-0 text-center">
+                  11 פריטים ארציים
+                </span>
+              </div>
+
+              <div className="overflow-x-auto rounded-xl border border-slate-200 shadow-2xs">
+                <table className="w-full text-right text-xs">
+                  <thead className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
+                    <tr>
+                      <th className="p-3">#</th>
+                      <th className="p-3">שם התוספת / הפריט</th>
+                      <th className="p-3">סוג פריט</th>
+                      <th className="p-3">שיוך גיאוגרפי</th>
+                      <th className="p-3 text-center">מחיר ארצי אחיד (בש"ח)</th>
+                      <th className="p-3">תוקף החל מ-</th>
+                      <th className="p-3 text-center">פעולות עריכה ארצית</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 bg-white">
+                    {GLOBAL_ADDONS_DEF.map((item, idx) => {
+                      const sampleTariff = tariffs.find(t => t.mealTypeId === item.id);
+                      const currentPrice = sampleTariff ? Number(sampleTariff.priceNis) : item.defaultPrice;
+                      const isEditing = editingGlobalMealTypeId === item.id;
+
+                      return (
+                        <tr key={item.id} className={isEditing ? 'bg-amber-50/70' : 'hover:bg-slate-50'}>
+                          <td className="p-3 font-mono text-slate-400">{idx + 1}</td>
+                          <td className="p-3 font-bold text-slate-900 text-sm">{item.name}</td>
+                          <td className="p-3">
+                            <span className="bg-slate-100 text-slate-700 px-2.5 py-0.5 rounded text-[11px] font-medium">
+                              {item.itemType}
+                            </span>
+                          </td>
+                          <td className="p-3">
+                            <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 px-2.5 py-0.5 rounded text-[11px] font-bold">
+                              ארצי (כל 124 התחנות)
+                            </span>
+                          </td>
+                          
+                          {/* Editable Price cell */}
+                          <td className="p-3 text-center font-mono font-bold text-emerald-700 text-sm">
+                            {isEditing ? (
+                              <div className="flex items-center justify-center gap-1">
+                                <span className="text-slate-500 text-xs">₪</span>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  value={editingGlobalPrice}
+                                  onChange={(e) => setEditingGlobalPrice(e.target.value)}
+                                  className="w-28 bg-white border-2 border-purple-600 rounded px-2 py-1 text-center font-bold text-slate-900 focus:outline-none"
+                                  autoFocus
+                                />
+                              </div>
+                            ) : (
+                              `₪${currentPrice.toFixed(2)}`
+                            )}
+                          </td>
+
+                          <td className="p-3 text-slate-500 font-mono">2026-06-01</td>
+
+                          {/* Actions column */}
+                          <td className="p-3 text-center">
+                            {isEditing ? (
+                              <div className="flex items-center justify-center gap-1">
+                                <button
+                                  onClick={() => saveGlobalTariff(item.id)}
+                                  disabled={isSavingTariff}
+                                  className="p-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-xs flex items-center gap-1 transition cursor-pointer shadow-xs disabled:opacity-50"
+                                  title="עדכן מחיר לכלל המדינה"
+                                >
+                                  <Check className="w-3.5 h-3.5" />
+                                  <span>שמור לכל הארץ</span>
+                                </button>
+                                <button
+                                  onClick={cancelEditGlobalTariff}
+                                  className="p-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-xs transition cursor-pointer"
+                                  title="בטל"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => startEditGlobalTariff(item.id, currentPrice)}
+                                className="inline-flex items-center gap-1 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer"
+                                title="ערוך מחיר ארצי לכלל התחנות"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                                <span>ערוך תעריף ארצי</span>
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
         </div>
       )}
+
 
       {activeTab === 'users' && (
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden p-5">
