@@ -23,6 +23,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
   const [activeTab, setActiveTab] = useState<'kitchens' | 'suppliers' | 'tariffs' | 'users'>('kitchens');
   const [selectedClusterFilter, setSelectedClusterFilter] = useState<string>('all');
   const [selectedKitchenFilter, setSelectedKitchenFilter] = useState<string>('all');
+  const [selectedMealTypeFilter, setSelectedMealTypeFilter] = useState<string>('all');
   const [kitchenSearchQuery, setKitchenSearchQuery] = useState<string>('');
 
   const sortedKitchens = [...kitchens].sort((a, b) => {
@@ -33,6 +34,10 @@ export const AdminView: React.FC<AdminViewProps> = ({
 
   const availableClusters = Array.from(new Set(
     tariffs.map(t => t.clusterName || kitchens.find(k => k.id === t.kitchenId)?.cluster || '').filter(Boolean)
+  )).sort((a, b) => a.localeCompare(b, 'he'));
+
+  const availableMealTypes = Array.from(new Set(
+    tariffs.map(t => t.mealTypeName || '').filter(Boolean)
   )).sort((a, b) => a.localeCompare(b, 'he'));
 
   // תלות סינון: מטבחי האשכול הנבחר בלבד
@@ -51,11 +56,13 @@ export const AdminView: React.FC<AdminViewProps> = ({
     const cluster = t.clusterName || k?.cluster || '';
     if (selectedClusterFilter !== 'all' && cluster !== selectedClusterFilter) return false;
     if (selectedKitchenFilter !== 'all' && String(t.kitchenId) !== selectedKitchenFilter) return false;
+    if (selectedMealTypeFilter !== 'all' && t.mealTypeName !== selectedMealTypeFilter) return false;
     if (kitchenSearchQuery.trim()) {
       const q = kitchenSearchQuery.toLowerCase().trim();
       const kName = (t.kitchenName || k?.name || '').toLowerCase();
       const cName = cluster.toLowerCase();
-      if (!kName.includes(q) && !cName.includes(q)) return false;
+      const mName = (t.mealTypeName || '').toLowerCase();
+      if (!kName.includes(q) && !cName.includes(q) && !mName.includes(q)) return false;
     }
     return true;
   });
@@ -257,6 +264,21 @@ export const AdminView: React.FC<AdminViewProps> = ({
               </select>
             </div>
 
+            {/* Meal Type Filter */}
+            <div className="flex items-center gap-2">
+              <label className="font-bold text-slate-700">סוג ארוחה:</label>
+              <select
+                value={selectedMealTypeFilter}
+                onChange={(e) => setSelectedMealTypeFilter(e.target.value)}
+                className="bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 font-medium text-slate-800 focus:ring-2 focus:ring-purple-500 focus:outline-none max-w-[200px]"
+              >
+                <option value="all">כל סוגי הארוחות ({availableMealTypes.length})</option>
+                {availableMealTypes.map(m => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
+            </div>
+
             {/* Live Search Input inside Cluster Kitchens */}
             <div className="flex items-center gap-1.5 bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 shadow-2xs focus-within:ring-2 focus-within:ring-purple-500">
               <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
@@ -278,11 +300,12 @@ export const AdminView: React.FC<AdminViewProps> = ({
               )}
             </div>
 
-            {(selectedClusterFilter !== 'all' || selectedKitchenFilter !== 'all' || kitchenSearchQuery !== '') && (
+            {(selectedClusterFilter !== 'all' || selectedKitchenFilter !== 'all' || selectedMealTypeFilter !== 'all' || kitchenSearchQuery !== '') && (
               <button
                 onClick={() => {
                   setSelectedClusterFilter('all');
                   setSelectedKitchenFilter('all');
+                  setSelectedMealTypeFilter('all');
                   setKitchenSearchQuery('');
                 }}
                 className="text-purple-700 hover:text-purple-900 font-bold underline px-2 py-1 cursor-pointer"

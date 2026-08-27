@@ -1967,12 +1967,24 @@ export const mockKitchens: Kitchen[] = [
 ];
 
 export const mockMealTypes: MealType[] = [
-  { id: 1, code: 'breakfast', nameHebrew: 'ארוחת בוקר א\'-ו\'', isHotMeal: false, sortOrder: 1 },
-  { id: 2, code: 'lunch', nameHebrew: 'ארוחת צהריים א\'-ו\'', isHotMeal: true, sortOrder: 2 },
-  { id: 3, code: 'dinner', nameHebrew: 'ארוחת ערב א\'-ה\'', isHotMeal: false, sortOrder: 3 },
-  { id: 4, code: 'hot_dinner', nameHebrew: 'ערב שישי בשרית', isHotMeal: true, sortOrder: 4 },
-  { id: 5, code: 'special_event', nameHebrew: 'שבת צהריים פיקס', isHotMeal: true, sortOrder: 5 },
-  { id: 6, code: 'takeaway', nameHebrew: 'מארז בשרי / פרווה / בולים', isHotMeal: true, sortOrder: 6 }
+  { id: 1, code: 'breakfast', nameHebrew: 'ארוחת בוקר (א\'-ו\')', isHotMeal: false, sortOrder: 1 },
+  { id: 2, code: 'lunch', nameHebrew: 'ארוחת צהריים (א\'-ו\')', isHotMeal: true, sortOrder: 2 },
+  { id: 3, code: 'dinner', nameHebrew: 'ארוחת ערב (א\'-ה\')', isHotMeal: false, sortOrder: 3 },
+  { id: 4, code: 'friday_dinner', nameHebrew: 'ערב שישי בשרית', isHotMeal: true, sortOrder: 4 },
+  { id: 5, code: 'shabbat_lunch', nameHebrew: 'שבת צהריים (בשרית)', isHotMeal: true, sortOrder: 5 },
+  { id: 6, code: 'shabbat_breakfast', nameHebrew: 'ארוחת בוקר שבת', isHotMeal: false, sortOrder: 6 },
+  { id: 7, code: 'motzash_dinner', nameHebrew: 'ארוחת ערב מוצאי שבת', isHotMeal: true, sortOrder: 7 },
+  { id: 8, code: 'stamps', nameHebrew: 'בולים (בולי מזון)', isHotMeal: false, sortOrder: 8 },
+  { id: 9, code: 'hot_transport', nameHebrew: 'שינוע חם', isHotMeal: false, sortOrder: 9 },
+  { id: 10, code: 'cold_transport', nameHebrew: 'שינוע קר', isHotMeal: false, sortOrder: 10 },
+  { id: 11, code: 'protein_addon', nameHebrew: 'תוספת חלבון', isHotMeal: false, sortOrder: 11 },
+  { id: 12, code: 'meal_box_3', nameHebrew: 'חמגשית (3 תאים)', isHotMeal: true, sortOrder: 12 },
+  { id: 13, code: 'box_side', nameHebrew: 'נלווה לחמגשית', isHotMeal: false, sortOrder: 13 },
+  { id: 14, code: 'snack_night', nameHebrew: 'ארוחת ביניים ולילה', isHotMeal: false, sortOrder: 14 },
+  { id: 15, code: 'detainee_box', nameHebrew: 'חמגשית עצור', isHotMeal: true, sortOrder: 15 },
+  { id: 16, code: 'pack_breakfast', nameHebrew: 'מארז בוקר', isHotMeal: false, sortOrder: 16 },
+  { id: 17, code: 'pack_meat_parve', nameHebrew: 'מארז בשרי / פרווה', isHotMeal: true, sortOrder: 17 },
+  { id: 18, code: 'holiday_kit', nameHebrew: 'ערכות סימני חג', isHotMeal: false, sortOrder: 18 }
 ];
 
 export const mockTariffs: KitchenTariff[] = [

@@ -50,7 +50,7 @@ export interface Kitchen {
 
 export interface MealType {
   id: number;
-  code: 'breakfast' | 'lunch' | 'dinner' | 'hot_dinner' | 'special_event' | 'takeaway';
+  code: string;
   nameHebrew: string;
   isHotMeal: boolean;
   sortOrder: number;
