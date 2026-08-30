@@ -94,6 +94,8 @@ export interface DailyReportRow {
   isSpecialEvent: boolean;        // R3
   eventCostNis?: number;          // סכום בש"ח להמרה
   notes?: string;
+  attachmentFileName?: string;    // שם קובץ אסמכתא שצורף
+  status?: SummaryStatus;         // טיוטה / ממתין לאישור רמת"ל / מאושר
 }
 
 export interface CalculationAuditEntry {

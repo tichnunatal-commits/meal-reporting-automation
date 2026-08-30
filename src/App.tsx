@@ -284,7 +284,6 @@ export const App: React.FC = () => {
   };
 
   const handleSubmitMonth = async (summaryId: number) => {
-
     try {
       await fetch(`${API_BASE}/reports/submit-month`, {
         method: 'POST',
@@ -294,6 +293,8 @@ export const App: React.FC = () => {
     } catch (e) {
       console.error(e);
     }
+
+    const targetSummary = monthlySummaries.find(s => s.id === summaryId);
 
     setMonthlySummaries(prev => prev.map(s => {
       if (s.id === summaryId) {
@@ -305,6 +306,15 @@ export const App: React.FC = () => {
       }
       return s;
     }));
+
+    if (targetSummary) {
+      setDailyReports(prev => prev.map(r => {
+        if (r.kitchenId === targetSummary.kitchenId) {
+          return { ...r, status: 'submitted' };
+        }
+        return r;
+      }));
+    }
   };
 
   const handleApproveSummary = async (summaryId: number) => {
@@ -317,6 +327,8 @@ export const App: React.FC = () => {
     } catch (e) {
       console.error(e);
     }
+
+    const targetSummary = monthlySummaries.find(s => s.id === summaryId);
 
     setMonthlySummaries(prev => prev.map(s => {
       if (s.id === summaryId) {
@@ -336,6 +348,15 @@ export const App: React.FC = () => {
       }
       return s;
     }));
+
+    if (targetSummary) {
+      setDailyReports(prev => prev.map(r => {
+        if (r.kitchenId === targetSummary.kitchenId) {
+          return { ...r, status: 'ramtal_approved' };
+        }
+        return r;
+      }));
+    }
   };
 
   const handleReturnSummary = async (summaryId: number, reason: string) => {
@@ -349,6 +370,8 @@ export const App: React.FC = () => {
       console.error(e);
     }
 
+    const targetSummary = monthlySummaries.find(s => s.id === summaryId);
+
     setMonthlySummaries(prev => prev.map(s => {
       if (s.id === summaryId) {
         return {
@@ -359,6 +382,15 @@ export const App: React.FC = () => {
       }
       return s;
     }));
+
+    if (targetSummary) {
+      setDailyReports(prev => prev.map(r => {
+        if (r.kitchenId === targetSummary.kitchenId) {
+          return { ...r, status: 'returned_for_revision' };
+        }
+        return r;
+      }));
+    }
   };
 
   const handleAdjustDailyRow = async (rowId: number, newQty: number, reason: string) => {
