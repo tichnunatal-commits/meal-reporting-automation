@@ -283,9 +283,9 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
 
   // Helper for 4 exact statuses
   const getStatusBadge = (row: DailyReportRow) => {
-    const s = row.status || (isMonthSubmitted ? 'submitted' : 'draft');
+    const s = row.status || 'draft';
 
-    if (s === 'returned_for_revision') {
+    if (s === 'returned_for_revision' || s === 'rejected') {
       return (
         <span className="inline-flex items-center gap-1 bg-rose-100 text-rose-800 border border-rose-300 font-bold px-2.5 py-0.5 rounded-full text-[10px]">
           <AlertTriangle className="w-3 h-3 text-rose-600 shrink-0" />
@@ -294,7 +294,7 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
       );
     }
 
-    if (s === 'submitted' || isMonthSubmitted) {
+    if (s === 'submitted') {
       return (
         <span className="inline-flex items-center gap-1 bg-blue-100 text-blue-800 border border-blue-300 font-bold px-2.5 py-0.5 rounded-full text-[10px]">
           <Clock className="w-3 h-3 text-blue-600 shrink-0" />
@@ -303,7 +303,7 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
       );
     }
 
-    if (s === 'ramtal_approved' || s === 'food_dept_approved') {
+    if (s === 'ramtal_approved' || s === 'approved' || s === 'food_dept_approved') {
       return (
         <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold px-2.5 py-0.5 rounded-full text-[10px]">
           <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
@@ -486,11 +486,27 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
         </div>
       </div>
 
-      {/* Workflow Status Card - 6. סרגל חיווי מידעי בלבד */}
+      {/* Workflow Status Card - 1. סרגל חיווי מידעי ללא באנר רוח */}
       {(() => {
-        const hasReturnedRows = currentReports.some(r => r.status === 'returned_for_revision');
+        if (currentReports.length === 0) {
+          return (
+            <div className="p-4 rounded-2xl border bg-slate-50 border-slate-200 text-slate-600 flex items-center gap-3">
+              <div className="shrink-0">
+                <FileText className="w-5 h-5 text-slate-400" />
+              </div>
+              <div className="min-w-0">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">סטטוס דוח חודשי:</div>
+                <div className="font-bold text-xs sm:text-sm text-slate-700">
+                  אין שורות דיווח שנרשמו לחודש זה
+                </div>
+              </div>
+            </div>
+          );
+        }
+
+        const hasReturnedRows = currentReports.some(r => r.status === 'returned_for_revision' || r.status === 'rejected');
         const hasSubmittedRows = currentReports.some(r => r.status === 'submitted');
-        const allApproved = currentReports.length > 0 && currentReports.every(r => r.status === 'ramtal_approved' || r.status === 'food_dept_approved');
+        const allApproved = currentReports.length > 0 && currentReports.every(r => r.status === 'ramtal_approved' || r.status === 'approved' || r.status === 'food_dept_approved');
 
         let cardBg = 'bg-amber-50/80 border-amber-200 text-amber-900';
         let statusTitle = 'טיוטה פתוחה להזנה (טרם הוגש לרמת"ל)';
@@ -842,7 +858,7 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
                     </div>
 
                     <div>
-                      {rowStatus === 'returned_for_revision' ? (
+                      {rowStatus === 'returned_for_revision' || rowStatus === 'rejected' ? (
                         <div className="flex items-center gap-1.5">
                           <button
                             type="button"
@@ -861,7 +877,7 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
-                      ) : rowStatus === 'submitted' || rowStatus === 'ramtal_approved' || rowStatus === 'food_dept_approved' ? (
+                      ) : rowStatus === 'submitted' || rowStatus === 'ramtal_approved' || rowStatus === 'approved' || rowStatus === 'food_dept_approved' ? (
                         <span className="inline-flex items-center gap-1.5 bg-slate-100 text-slate-700 border border-slate-300 font-bold px-2.5 py-1 rounded-lg text-xs shadow-2xs">
                           <Lock className="w-3.5 h-3.5 text-slate-500 shrink-0" />
                           <span>🔒 ננעל לעריכה (הוגש לרמת"ל)</span>
@@ -1092,7 +1108,7 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
                             <X className="w-3.5 h-3.5" />
                           </button>
                         </div>
-                      ) : rowStatus === 'returned_for_revision' ? (
+                      ) : rowStatus === 'returned_for_revision' || rowStatus === 'rejected' ? (
                         /* 5. חריג: נדרש תיקון - פתוח לעריכה או מחיקה עבור הספק */
                         <div className="flex items-center justify-center gap-1.5">
                           <button
@@ -1113,7 +1129,7 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
-                      ) : rowStatus === 'submitted' || rowStatus === 'ramtal_approved' || rowStatus === 'food_dept_approved' ? (
+                      ) : rowStatus === 'submitted' || rowStatus === 'ramtal_approved' || rowStatus === 'approved' || rowStatus === 'food_dept_approved' ? (
                         /* 2. נעילה הרמטית ברמת השורה הבודדת בלבד */
                         <span className="inline-flex items-center gap-1.5 bg-slate-100 text-slate-700 border border-slate-300 font-bold px-2.5 py-1 rounded-lg text-[11px] shadow-2xs">
                           <Lock className="w-3.5 h-3.5 text-slate-500 shrink-0" />

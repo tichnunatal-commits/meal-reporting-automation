@@ -141,7 +141,7 @@ export const RamtalView: React.FC<RamtalViewProps> = ({
   const getStatusBadge = (row: DailyReportRow) => {
     const s = row.status || 'submitted';
 
-    if (s === 'returned_for_revision') {
+    if (s === 'returned_for_revision' || s === 'rejected') {
       return (
         <span className="inline-flex items-center gap-1 bg-rose-100 text-rose-800 border border-rose-300 font-bold px-2.5 py-0.5 rounded-full text-[10px]">
           <AlertTriangle className="w-3 h-3 text-rose-600 shrink-0" />
@@ -159,7 +159,7 @@ export const RamtalView: React.FC<RamtalViewProps> = ({
       );
     }
 
-    if (s === 'ramtal_approved' || s === 'food_dept_approved') {
+    if (s === 'ramtal_approved' || s === 'approved' || s === 'food_dept_approved') {
       return (
         <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold px-2.5 py-0.5 rounded-full text-[10px]">
           <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
@@ -183,7 +183,7 @@ export const RamtalView: React.FC<RamtalViewProps> = ({
 
   const totalReportedAll = currentReports.reduce((acc, curr) => acc + (curr.rawReportedQty || 0), 0);
   const totalApprovedAll = currentReports
-    .filter(r => r.status === 'ramtal_approved' || r.status === 'food_dept_approved')
+    .filter(r => r.status === 'ramtal_approved' || r.status === 'approved' || r.status === 'food_dept_approved')
     .reduce((acc, curr) => acc + (curr.ramtalAdjustedQty !== undefined ? curr.ramtalAdjustedQty : (curr.rawReportedQty || 0)), 0);
 
   return (
@@ -452,12 +452,12 @@ export const RamtalView: React.FC<RamtalViewProps> = ({
 
                       {/* Actions */}
                       <td className="p-3 text-center">
-                        {row.status === 'ramtal_approved' || row.status === 'food_dept_approved' ? (
+                        {row.status === 'ramtal_approved' || row.status === 'approved' || row.status === 'food_dept_approved' ? (
                           <span className="inline-flex items-center gap-1 text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg text-[11px] font-bold shadow-2xs">
                             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                             <span>מאושר (ננעל)</span>
                           </span>
-                        ) : row.status === 'returned_for_revision' ? (
+                        ) : row.status === 'returned_for_revision' || row.status === 'rejected' ? (
                           <span className="inline-flex items-center gap-1 text-rose-700 bg-rose-50 border border-rose-200 px-2.5 py-1 rounded-lg text-[11px] font-bold shadow-2xs">
                             <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
                             <span>הוחזר לתיקון</span>

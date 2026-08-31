@@ -364,6 +364,8 @@ export const App: React.FC = () => {
   };
 
   const handleSubmitMonth = async ({ kitchenId, month, year, summaryId }: { kitchenId: number; month: number; year: number; summaryId?: number }) => {
+    const nowIso = new Date().toISOString().replace('T', ' ').substring(0, 16);
+
     try {
       await fetch(`${API_BASE}/reports/submit-month`, {
         method: 'POST',
@@ -374,12 +376,12 @@ export const App: React.FC = () => {
       console.error(e);
     }
 
-    const nowIso = new Date().toISOString().replace('T', ' ').substring(0, 16);
-
-    // 1. עדכון מידי של כל השורות השייכות למטבח ולחודש הנבחר לסטטוס: ממתין לאישור רמת"ל (כחול 🔵)
+    // 1. חוק ברזל: עדכון ל-submitted אך ורק עבור שורות בסטטוס draft!
+    // אסור לשנות או לגעת בשורות שנמצאות בסטטוס rejected (נדרש תיקון) או approved / ramtal_approved!
     setDailyReports(prev => prev.map(r => {
       if (r.kitchenId === kitchenId) {
-        if (isRowInTargetPeriod(r.reportDate, month, year) || (r.status || 'draft') === 'draft') {
+        const isDraft = (r.status || 'draft') === 'draft';
+        if (isDraft && isRowInTargetPeriod(r.reportDate, month, year)) {
           return { ...r, status: 'submitted' };
         }
       }
@@ -675,27 +677,15 @@ export const App: React.FC = () => {
     const currentMonthPrefix = todayStr.substring(0, 7);
 
     if (kitchenId === undefined && filterType === 'all') {
-      // 1. איפוס מוחלט (Master Reset) ל-0 שורות במערכת
+      // 1. איפוס מוחלט (Master Reset) ל-0 שורות ו-0 סיכומים במערכת
       setDailyReports([]);
+      setMonthlySummaries([]);
       try {
         localStorage.setItem(REPORTS_STORAGE_KEY, JSON.stringify([]));
         localStorage.setItem(SUMMARIES_STORAGE_KEY, JSON.stringify([]));
       } catch (e) {
         console.error(e);
       }
-
-      setMonthlySummaries(prev => prev.map(s => ({
-        ...s,
-        status: 'draft',
-        totalReportedRaw: 0,
-        totalRamtalApproved: 0,
-        calculatedNetMeals: 0,
-        calculatedTotalAmountNis: 0,
-        submittedAt: undefined,
-        ramtalApprovedAt: undefined,
-        foodDeptApprovedAt: undefined,
-        revisionReason: undefined
-      })));
       return;
     }
 

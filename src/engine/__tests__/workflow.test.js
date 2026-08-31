@@ -30,202 +30,137 @@ const isRowInTargetPeriod = (reportDate, targetMonth, targetYear) => {
   return true;
 };
 
-test('Comprehensive Workflow V3: Master Reset, Dynamic Drafts, Ramtal Strictly-Approved Calculation, Revision Cycle & Deletion', () => {
+test('Strict Row Autonomy & No-Bleed Workflow (V4)', () => {
   let dailyReports = [];
-  let monthlySummaries = [
-    {
-      id: 1,
-      kitchenId: 1,
-      kitchenName: 'מטבח מכמש',
-      supplierId: 1,
-      supplierName: 'קייטרינג גורמה',
-      periodYear: 2026,
-      periodMonth: 8,
-      ramtalUserId: 2,
-      ramtalUserName: 'רפ"ק אבי כהן',
-      status: 'draft',
-      totalReportedRaw: 0,
-      totalRamtalApproved: 0,
-      calculatedNetMeals: 0,
-      calculatedTotalAmountNis: 0,
-      calculationAudit: []
+  let monthlySummaries = [];
+
+  // Helper row locking check
+  const isRowLocked = (row) => {
+    const s = row.status || 'draft';
+    return s === 'submitted' || s === 'ramtal_approved' || s === 'approved' || s === 'food_dept_approved';
+  };
+
+  // Helper banner status computer
+  const computeBannerStatus = (reports) => {
+    if (reports.length === 0) {
+      return { title: 'אין שורות דיווח שנרשמו לחודש זה', type: 'empty' };
     }
-  ];
+    const hasReturned = reports.some(r => r.status === 'returned_for_revision' || r.status === 'rejected');
+    const hasSubmitted = reports.some(r => r.status === 'submitted');
+    const allApproved = reports.length > 0 && reports.every(r => r.status === 'ramtal_approved' || r.status === 'approved' || r.status === 'food_dept_approved');
 
-  // 1. הוספת 2 שורות טיוטה ע"י ספק
-  const row1 = {
-    id: 101,
-    monthlySummaryId: 1,
-    kitchenId: 1,
-    reportDate: '2026-08-01',
-    mealTypeId: 2,
-    mealTypeName: 'צהריים',
-    diningHallQty: 100,
-    takeawayQty: 20,
-    rawReportedQty: 120,
-    isSpecialEvent: false,
-    notes: 'אסמכתא 101',
-    status: 'draft'
+    if (hasReturned) return { title: 'קיימות שורות שנדרשו לתיקון', type: 'revision' };
+    if (allApproved) return { title: 'הדו"ח אושר ע"י רמת"ל', type: 'approved' };
+    if (hasSubmitted) return { title: 'ממתין לאישור רמת"ל', type: 'submitted' };
+    return { title: 'טיוטה פתוחה להזנה', type: 'draft' };
   };
 
-  const row2 = {
-    id: 102,
-    monthlySummaryId: 1,
-    kitchenId: 1,
-    reportDate: '02/08/2026', // Hebrew date format
-    mealTypeId: 2,
-    mealTypeName: 'צהריים',
-    diningHallQty: 80,
-    takeawayQty: 10,
-    rawReportedQty: 90,
-    isSpecialEvent: false,
-    notes: 'אסמכתא 102',
-    status: 'draft'
-  };
+  // 1. איפוס מאסטר ואימות היעדר באנר "draft" רוח (Issue 1)
+  dailyReports = [];
+  monthlySummaries = [];
+  const emptyBanner = computeBannerStatus(dailyReports);
+  assert.equal(emptyBanner.type, 'empty', '0 rows must yield empty neutral status, not draft');
+  assert.equal(emptyBanner.title, 'אין שורות דיווח שנרשמו לחודש זה');
 
-  dailyReports.push(row1, row2);
-  assert.equal(dailyReports.length, 2);
-  assert.equal(dailyReports[0].status, 'draft');
-  assert.equal(dailyReports[1].status, 'draft');
+  // 2. הוספת 5 שורות והגשת החודש (Issue 2)
+  for (let i = 1; i <= 5; i++) {
+    dailyReports.push({
+      id: 200 + i,
+      kitchenId: 1,
+      reportDate: `2026-08-0${i}`,
+      mealTypeId: 2,
+      mealTypeName: 'צהריים',
+      diningHallQty: 50,
+      takeawayQty: 10,
+      rawReportedQty: 60,
+      status: 'draft'
+    });
+  }
+  assert.equal(dailyReports.length, 5);
+  assert.equal(dailyReports.every(r => !isRowLocked(r)), true, 'All fresh drafts must be unlocked');
 
-  // בידוד הרמטי: מסך הרמת"ל מסנן 100% טיוטות
-  const ramtalReportsInitial = dailyReports.filter(r => (r.status || 'draft') !== 'draft');
-  assert.equal(ramtalReportsInitial.length, 0, 'Ramtal view must strictly show 0 drafts');
-
-  // 2. הגשת החודש לרמת"ל (סיום דיווח חודשי)
+  // הגשת חודש: מעדכן אך ורק שורות draft ל-submitted
   const targetKitchenId = 1;
-  const submitMonth = 8;
-  const submitYear = 2026;
+  const month = 8;
+  const year = 2026;
 
   dailyReports = dailyReports.map(r => {
     if (r.kitchenId === targetKitchenId) {
-      if (isRowInTargetPeriod(r.reportDate, submitMonth, submitYear) || r.status === 'draft') {
+      const isDraft = (r.status || 'draft') === 'draft';
+      if (isDraft && isRowInTargetPeriod(r.reportDate, month, year)) {
         return { ...r, status: 'submitted' };
       }
     }
     return r;
   });
 
-  monthlySummaries = monthlySummaries.map(s => {
-    if (s.kitchenId === targetKitchenId) {
-      const sum = dailyReports.filter(r => r.kitchenId === targetKitchenId).reduce((a, c) => a + c.rawReportedQty, 0);
-      return { ...s, status: 'submitted', totalReportedRaw: sum, totalRamtalApproved: 0 };
-    }
-    return s;
-  });
+  assert.equal(dailyReports.every(r => r.status === 'submitted'), true);
+  assert.equal(dailyReports.every(r => isRowLocked(r)), true, 'Submitted rows are now locked');
 
-  // וידוא שהשורות ננעלו והסטטוס הפך ל-submitted
-  assert.equal(dailyReports[0].status, 'submitted');
-  assert.equal(dailyReports[1].status, 'submitted');
-  assert.equal(monthlySummaries[0].status, 'submitted');
-  assert.equal(monthlySummaries[0].totalReportedRaw, 210);
-
-  // בדיקת חישוב סה"כ כמות מאושרת ברמת"ל (Issue 3): שורות שהוגשו עדיין לא מאושרות -> סה"כ מאושר הוא 0
-  const ramtalApprovedSumBefore = dailyReports
-    .filter(r => r.status === 'ramtal_approved' || r.status === 'food_dept_approved')
-    .reduce((acc, curr) => acc + (curr.ramtalAdjustedQty !== undefined ? curr.ramtalAdjustedQty : curr.rawReportedQty), 0);
-  assert.equal(ramtalApprovedSumBefore, 0, 'Total approved must be strictly 0 before any approvals');
-
-  // 3. הוספת שורה 3 בטיוטה ע"י ספק לאחר ההגשה (Issue 2)
-  const row3 = {
-    id: 103,
-    monthlySummaryId: 1,
+  // 3. הוספת שורת טיוטה חדשה (שורה 6) לצד שורות נעולות (Issue 2)
+  const row6 = {
+    id: 206,
     kitchenId: 1,
-    reportDate: '2026-08-03',
+    reportDate: '2026-08-06',
     mealTypeId: 1,
     mealTypeName: 'בוקר',
-    diningHallQty: 50,
-    takeawayQty: 0,
-    rawReportedQty: 50,
-    isSpecialEvent: false,
-    notes: 'אסמכתא 103',
-    status: 'draft' // פתוחה לחלוטין לעריכה
+    rawReportedQty: 30,
+    status: 'draft'
   };
-  dailyReports.push(row3);
+  dailyReports.push(row6);
+  assert.equal(dailyReports.length, 6);
 
-  // וידוא ששורה 3 פתוחה בטיוטה ושורות 1-2 נשארות נעולות ב-submitted
-  assert.equal(dailyReports[2].status, 'draft');
-  assert.equal(dailyReports[0].status, 'submitted');
-  assert.equal(dailyReports[1].status, 'submitted');
+  // וידוא: שורה 6 פתוחה לעריכה (isLocked: false) בעוד 1-5 נשארות נעולות (isLocked: true)
+  assert.equal(isRowLocked(dailyReports[5]), false, 'Row 6 draft must remain strictly unlocked');
+  assert.equal(isRowLocked(dailyReports[0]), true, 'Row 1 submitted must remain strictly locked');
+  assert.equal(isRowLocked(dailyReports[4]), true, 'Row 5 submitted must remain strictly locked');
 
-  // נעילת שורה נבדקת ברמת השורה הבודדת בלבד
-  const isRow3Locked = dailyReports[2].status === 'submitted' || dailyReports[2].status === 'ramtal_approved';
-  assert.equal(isRow3Locked, false, 'Row 3 must remain unlocked');
+  // 4. אישור 4 שורות מתוך 5 והחזרת השורה ה-5 לתיקון - מניעת זליגת סטטוסים (Issue 4)
+  // רמת"ל מאשר את שורות 201, 202, 203, 204
+  [201, 202, 203, 204].forEach(rowId => {
+    dailyReports = dailyReports.map(r => r.id === rowId ? { ...r, status: 'ramtal_approved' } : r);
+  });
 
-  // 4. אישור שורה 1 ע"י רמת"ל (Issue 3)
-  dailyReports = dailyReports.map(r => r.id === 101 ? { ...r, status: 'ramtal_approved' } : r);
-  assert.equal(dailyReports[0].status, 'ramtal_approved');
+  // רמת"ל מחזיר את שורה 205 לתיקון
+  dailyReports = dailyReports.map(r => r.id === 205 ? {
+    ...r,
+    status: 'returned_for_revision',
+    ramtalAdjustmentReason: 'חוסר התאמה לאסמכתא'
+  } : r);
 
-  // וידוא חישוב סה"כ כמות מאושרת ברמת"ל: שורה 1 בלבד (120 מנות)
-  const ramtalApprovedSumAfterRow1 = dailyReports
+  // אימות: בדיוק 4 שורות הן ramtal_approved, בדיוק 1 היא returned_for_revision, שורה 206 נשארת draft
+  const approvedRows = dailyReports.filter(r => r.status === 'ramtal_approved');
+  const rejectedRows = dailyReports.filter(r => r.status === 'returned_for_revision');
+  const draftRows = dailyReports.filter(r => r.status === 'draft');
+
+  assert.equal(approvedRows.length, 4, 'Strictly 4 rows must be approved (no leakage)');
+  assert.equal(rejectedRows.length, 1, 'Strictly row 205 is returned for revision');
+  assert.equal(rejectedRows[0].id, 205);
+  assert.equal(draftRows.length, 1, 'Row 206 remains draft');
+  assert.equal(draftRows[0].id, 206);
+
+  // בדיקת סכום כמות מאושרת: 4 שורות * 60 מנות = 240 מנות מאושרות
+  const totalApprovedSum = dailyReports
     .filter(r => r.status === 'ramtal_approved' || r.status === 'food_dept_approved')
-    .reduce((acc, curr) => acc + (curr.ramtalAdjustedQty !== undefined ? curr.ramtalAdjustedQty : curr.rawReportedQty), 0);
-  assert.equal(ramtalApprovedSumAfterRow1, 120, 'Total approved must equal strictly approved row 1 (120)');
+    .reduce((acc, curr) => acc + curr.rawReportedQty, 0);
+  assert.equal(totalApprovedSum, 240, 'Approved quantity must sum strictly approved rows (240)');
 
-  // 5. החזרת שורה 2 לתיקון ע"י רמת"ל עם נימוק חובה
-  const revisionReason = 'אי התאמה לספירת שומר בשער';
-  dailyReports = dailyReports.map(r => r.id === 102 ? { ...r, status: 'returned_for_revision', ramtalAdjustmentReason: revisionReason } : r);
-  
-  assert.equal(dailyReports[1].status, 'returned_for_revision');
-  assert.equal(dailyReports[1].ramtalAdjustmentReason, revisionReason);
-
-  // 6. עדכון נקודתי לשורה בתיקון ע"י ספק (Issue 4)
-  const updatedRow2 = {
-    ...dailyReports[1],
-    diningHallQty: 75,
-    rawReportedQty: 85,
-    notes: 'תוקן לפי ספירת שער עדכנית'
-  };
-  // בעת שמירה, מעבר מ-returned_for_revision ל-submitted מתבצע אך ורק עבור אותה שורה
+  // 5. הגשת חודש נוספת - משנה רק את שורה 206 (draft) ואינה נוגעת בשורה 205 (rejected) (Issue 2)
   dailyReports = dailyReports.map(r => {
-    if (r.id === updatedRow2.id) {
-      return { ...updatedRow2, status: 'submitted' };
+    if (r.kitchenId === targetKitchenId) {
+      const isDraft = (r.status || 'draft') === 'draft';
+      if (isDraft && isRowInTargetPeriod(r.reportDate, month, year)) {
+        return { ...r, status: 'submitted' };
+      }
     }
     return r;
   });
-  assert.equal(dailyReports[1].status, 'submitted');
-  assert.equal(dailyReports[1].rawReportedQty, 85);
-  // שורה 3 נשארת draft ושורה 1 נשארת ramtal_approved
-  assert.equal(dailyReports[0].status, 'ramtal_approved');
-  assert.equal(dailyReports[2].status, 'draft');
 
-  // 7. הוספה ומחיקה של שורה שהוחזרה לתיקון (Issue 5)
-  const row4 = {
-    id: 104,
-    monthlySummaryId: 1,
-    kitchenId: 1,
-    reportDate: '2026-08-04',
-    mealTypeId: 1,
-    mealTypeName: 'בוקר',
-    rawReportedQty: 40,
-    status: 'returned_for_revision'
-  };
-  dailyReports.push(row4);
-  assert.equal(dailyReports.length, 4);
+  assert.equal(dailyReports.find(r => r.id === 206).status, 'submitted');
+  assert.equal(dailyReports.find(r => r.id === 205).status, 'returned_for_revision', 'Row 205 must NOT be overwritten by month submit');
 
-  // מחיקת שורה בסטטוס נדרש תיקון
-  dailyReports = dailyReports.filter(r => r.id !== 104);
-  assert.equal(dailyReports.length, 3);
-  assert.equal(dailyReports.some(r => r.id === 104), false);
-
-  // 8. איפוס מאסטר מוחלט (Issue 1)
-  dailyReports = [];
-  monthlySummaries = monthlySummaries.map(s => ({
-    ...s,
-    status: 'draft',
-    totalReportedRaw: 0,
-    totalRamtalApproved: 0,
-    calculatedNetMeals: 0,
-    calculatedTotalAmountNis: 0,
-    submittedAt: undefined,
-    ramtalApprovedAt: undefined,
-    foodDeptApprovedAt: undefined,
-    revisionReason: undefined
-  }));
-
-  // וידוא ניקוי מלא ב-100% ל-0 שורות בכל המערכת
-  assert.equal(dailyReports.length, 0);
-  assert.equal(monthlySummaries[0].status, 'draft');
-  assert.equal(monthlySummaries[0].totalReportedRaw, 0);
-  assert.equal(monthlySummaries[0].totalRamtalApproved, 0);
+  // 6. מחיקת שורה בסטטוס נדרש תיקון ע"י הספק (Issue 3)
+  dailyReports = dailyReports.filter(r => r.id !== 205);
+  assert.equal(dailyReports.length, 5);
+  assert.equal(dailyReports.some(r => r.id === 205), false, 'Row 205 must be deleted completely');
 });
