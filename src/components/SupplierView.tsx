@@ -486,45 +486,61 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
         </div>
       </div>
 
-      {/* Workflow Status Card */}
-      {currentSummary && (
-        <div className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
-          currentSummary.status === 'draft' ? 'bg-amber-50/80 border-amber-200 text-amber-900' :
-          currentSummary.status === 'submitted' ? 'bg-blue-50/80 border-blue-200 text-blue-900' :
-          currentSummary.status === 'returned_for_revision' ? 'bg-rose-50/80 border-rose-200 text-rose-900' :
-          'bg-emerald-50/80 border-emerald-200 text-emerald-900'
-        }`}>
-          <div className="flex items-start sm:items-center gap-3">
-            <div className="mt-0.5 sm:mt-0 shrink-0">
-              {currentSummary.status === 'submitted' && <Clock className="w-5 h-5 text-blue-600" />}
-              {currentSummary.status === 'returned_for_revision' && <AlertTriangle className="w-5 h-5 text-rose-600" />}
-              {currentSummary.status === 'ramtal_approved' && <CheckCircle2 className="w-5 h-5 text-emerald-600" />}
-              {currentSummary.status === 'draft' && <FileText className="w-5 h-5 text-amber-600" />}
-            </div>
-            
-            <div className="min-w-0">
-              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">סטטוס דוח חודשי:</div>
-              <div className="font-bold text-xs sm:text-sm break-words">
-                {currentSummary.status === 'draft' && 'טיוטה פתוחה להזנה (טרם הוגש לרמת"ל)'}
-                {currentSummary.status === 'submitted' && '🔵 ממתין לאישור רמת"ל (הדוח ננעל לבקרה משטרתית)'}
-                {currentSummary.status === 'returned_for_revision' && `🔴 נדרש תיקון ע"י הרמת"ל: "${currentSummary.revisionReason || 'נא לתקן כמויות ולשלוח מחדש'}"`}
-                {currentSummary.status === 'ramtal_approved' && '🟢 אושר ע"י רמת"ל — הועבר לבקרת מדור מזון'}
-                {currentSummary.status === 'food_dept_approved' && '🟢 אושר סופית לתשלום ע"י מדור מזון'}
+      {/* Workflow Status Card - Single Source of Truth derived from rows */}
+      {(() => {
+        const hasReturnedRows = currentReports.some(r => r.status === 'returned_for_revision');
+        const hasSubmittedRows = currentReports.some(r => r.status === 'submitted');
+        const hasDraftRows = currentReports.some(r => (r.status || 'draft') === 'draft');
+        const allApproved = currentReports.length > 0 && currentReports.every(r => r.status === 'ramtal_approved' || r.status === 'food_dept_approved');
+
+        let cardBg = 'bg-amber-50/80 border-amber-200 text-amber-900';
+        let statusTitle = 'טיוטה פתוחה להזנה (טרם הוגש לרמת"ל)';
+        let statusIcon = <FileText className="w-5 h-5 text-amber-600" />;
+
+        if (hasReturnedRows) {
+          cardBg = 'bg-rose-50/90 border-rose-300 text-rose-950';
+          statusTitle = `🔴 לתשומת לבך: קיימות שורות שנדרשו לתיקון ע"י הרמת"ל${currentSummary?.revisionReason ? ` — "${currentSummary.revisionReason}"` : ''}`;
+          statusIcon = <AlertTriangle className="w-5 h-5 text-rose-600" />;
+        } else if (allApproved) {
+          cardBg = 'bg-emerald-50/80 border-emerald-200 text-emerald-900';
+          statusTitle = '🟢 הדו"ח אושר ע"י רמת"ל — הועבר לבקרת מדור מזון';
+          statusIcon = <CheckCircle2 className="w-5 h-5 text-emerald-600" />;
+        } else if (hasSubmittedRows) {
+          cardBg = 'bg-blue-50/80 border-blue-200 text-blue-900';
+          const subCount = currentReports.filter(r => r.status === 'submitted').length;
+          statusTitle = `🔵 ממתין לאישור רמת"ל (${subCount} שורות הוגשו וננעלו לבקרה משטרתית)`;
+          statusIcon = <Clock className="w-5 h-5 text-blue-600" />;
+        }
+
+        return (
+          <div className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${cardBg}`}>
+            <div className="flex items-start sm:items-center gap-3">
+              <div className="mt-0.5 sm:mt-0 shrink-0">
+                {statusIcon}
+              </div>
+              
+              <div className="min-w-0">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">סטטוס דוח חודשי:</div>
+                <div className="font-bold text-xs sm:text-sm break-words">
+                  {statusTitle}
+                </div>
               </div>
             </div>
-          </div>
 
-          {(currentSummary.status === 'draft' || currentSummary.status === 'returned_for_revision') && (
-            <button
-              onClick={() => setShowSubmitConfirmModal(true)}
-              className="w-full sm:w-auto flex items-center justify-center gap-2 bg-gradient-to-r from-blue-700 to-indigo-700 hover:from-blue-600 hover:to-indigo-600 text-white font-bold text-xs sm:text-sm px-4 py-2.5 rounded-xl shadow-md transition shrink-0 cursor-pointer min-h-[44px]"
-            >
-              <Send className="w-4 h-4" />
-              סיום דיווח חודשי והגשה לרמת״ל
-            </button>
-          )}
-        </div>
-      )}
+            {(hasDraftRows || hasReturnedRows || currentReports.length === 0) && (
+              <button
+                type="button"
+                onClick={() => setShowSubmitConfirmModal(true)}
+                disabled={currentReports.length === 0}
+                className="w-full sm:w-auto flex items-center justify-center gap-2 bg-gradient-to-r from-blue-700 to-indigo-700 hover:from-blue-600 hover:to-indigo-600 text-white font-bold text-xs sm:text-sm px-4 py-2.5 rounded-xl shadow-md transition shrink-0 cursor-pointer min-h-[44px] disabled:opacity-50"
+              >
+                <Send className="w-4 h-4" />
+                <span>סיום דיווח חודשי והגשה לרמת״ל</span>
+              </button>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Daily Input Form */}
       <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs">

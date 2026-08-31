@@ -501,6 +501,44 @@ export const App: React.FC = () => {
     }
   };
 
+  const handleApproveDailyRow = (rowId: number) => {
+    setDailyReports(prev => {
+      const updated = prev.map(r => r.id === rowId ? { ...r, status: 'ramtal_approved' as const } : r);
+      const targetRow = prev.find(r => r.id === rowId);
+      if (targetRow) {
+        const kitchenRows = updated.filter(r => r.kitchenId === targetRow.kitchenId);
+        const allApproved = kitchenRows.length > 0 && kitchenRows.every(r => r.status === 'ramtal_approved' || r.status === 'food_dept_approved');
+        if (allApproved) {
+          setMonthlySummaries(mPrev => mPrev.map(s => s.kitchenId === targetRow.kitchenId ? {
+            ...s,
+            status: 'ramtal_approved',
+            ramtalApprovedAt: new Date().toISOString().replace('T', ' ').substring(0, 16)
+          } : s));
+        }
+      }
+      return updated;
+    });
+  };
+
+  const handleReturnDailyRow = (rowId: number, reason: string) => {
+    setDailyReports(prev => {
+      const updated = prev.map(r => r.id === rowId ? {
+        ...r,
+        status: 'returned_for_revision' as const,
+        ramtalAdjustmentReason: reason
+      } : r);
+      const targetRow = prev.find(r => r.id === rowId);
+      if (targetRow) {
+        setMonthlySummaries(mPrev => mPrev.map(s => s.kitchenId === targetRow.kitchenId ? {
+          ...s,
+          status: 'returned_for_revision',
+          revisionReason: reason
+        } : s));
+      }
+      return updated;
+    });
+  };
+
   const handleAdjustDailyRow = async (rowId: number, newQty: number, reason: string) => {
     try {
       await fetch(`${API_BASE}/reports/ramtal-adjust-row`, {
@@ -512,16 +550,26 @@ export const App: React.FC = () => {
       console.error(e);
     }
 
-    setDailyReports(prev => prev.map(r => {
-      if (r.id === rowId) {
-        return {
-          ...r,
-          ramtalAdjustedQty: newQty,
-          ramtalAdjustmentReason: reason
-        };
+    setDailyReports(prev => {
+      const updated = prev.map(r => {
+        if (r.id === rowId) {
+          return {
+            ...r,
+            ramtalAdjustedQty: newQty,
+            ramtalAdjustmentReason: reason,
+            status: 'ramtal_approved' as const
+          };
+        }
+        return r;
+      });
+      const targetRow = prev.find(r => r.id === rowId);
+      if (targetRow) {
+        const kitchenRows = updated.filter(r => r.kitchenId === targetRow.kitchenId);
+        const totalApproved = kitchenRows.reduce((acc, curr) => acc + (curr.ramtalAdjustedQty !== undefined ? curr.ramtalAdjustedQty : curr.rawReportedQty || 0), 0);
+        setMonthlySummaries(mPrev => mPrev.map(s => s.kitchenId === targetRow.kitchenId ? { ...s, totalRamtalApproved: totalApproved } : s));
       }
-      return r;
-    }));
+      return updated;
+    });
   };
 
   const handleFinalApproveSummary = async (summaryId: number) => {
@@ -795,6 +843,8 @@ export const App: React.FC = () => {
             onApproveSummary={handleApproveSummary}
             onReturnSummary={handleReturnSummary}
             onAdjustDailyRow={handleAdjustDailyRow}
+            onApproveDailyRow={handleApproveDailyRow}
+            onReturnDailyRow={handleReturnDailyRow}
           />
         )}
 

@@ -25,6 +25,8 @@ interface RamtalViewProps {
   onApproveSummary: (summaryId: number) => void;
   onReturnSummary: (summaryId: number, reason: string) => void;
   onAdjustDailyRow: (rowId: number, newQty: number, reason: string) => void;
+  onApproveDailyRow?: (rowId: number) => void;
+  onReturnDailyRow?: (rowId: number, reason: string) => void;
 }
 
 export const RamtalView: React.FC<RamtalViewProps> = ({
@@ -34,7 +36,9 @@ export const RamtalView: React.FC<RamtalViewProps> = ({
   monthlySummaries,
   onApproveSummary,
   onReturnSummary,
-  onAdjustDailyRow
+  onAdjustDailyRow,
+  onApproveDailyRow,
+  onReturnDailyRow
 }) => {
   const sortedKitchens = [...kitchens].sort((a, b) => {
     const clusterComp = (a.cluster || a.region || '').localeCompare(b.cluster || b.region || '', 'he');
@@ -50,6 +54,18 @@ export const RamtalView: React.FC<RamtalViewProps> = ({
 
   const [returnReasonModal, setReturnReasonModal] = useState<boolean>(false);
   const [returnText, setReturnText] = useState<string>('');
+
+  // Row Return Modal State
+  const [returnRowModalId, setReturnRowModalId] = useState<number | null>(null);
+  const [rowReturnReason, setRowReturnReason] = useState<string>('');
+
+  // Toast Feedback Banner
+  const [toastFeedback, setToastFeedback] = useState<{ message: string; type: 'success' | 'danger' } | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'danger' = 'success') => {
+    setToastFeedback({ message, type });
+    setTimeout(() => setToastFeedback(null), 5000);
+  };
 
   // Inline Row Editing states
   const [editingRowId, setEditingRowId] = useState<number | null>(null);
@@ -161,6 +177,28 @@ export const RamtalView: React.FC<RamtalViewProps> = ({
 
   return (
     <div className="space-y-6">
+      
+      {/* Toast Feedback Notification Banner */}
+      {toastFeedback && (
+        <div className={`p-4 rounded-2xl shadow-lg flex items-center justify-between text-white font-bold text-xs sm:text-sm animate-fade-in ${
+          toastFeedback.type === 'success' ? 'bg-emerald-600' : 'bg-rose-600'
+        }`}>
+          <div className="flex items-center gap-2">
+            {toastFeedback.type === 'success' ? (
+              <CheckCircle2 className="w-5 h-5 text-emerald-200" />
+            ) : (
+              <AlertTriangle className="w-5 h-5 text-rose-200" />
+            )}
+            <span>{toastFeedback.message}</span>
+          </div>
+          <button
+            onClick={() => setToastFeedback(null)}
+            className="p-1 hover:opacity-80 rounded-lg transition cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
       
       {/* 8. באנר עדכונים חדשים עם נקודה זוהרת (Glowing Dot) */}
       {newlySubmittedSummaries.length > 0 && (
@@ -403,31 +441,83 @@ export const RamtalView: React.FC<RamtalViewProps> = ({
 
                       {/* Actions */}
                       <td className="p-3 text-center">
-                        {isEditing ? (
+                        {row.status === 'ramtal_approved' || row.status === 'food_dept_approved' ? (
+                          <span className="inline-flex items-center gap-1 text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg text-[11px] font-bold shadow-2xs">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>מאושר (ננעל)</span>
+                          </span>
+                        ) : row.status === 'returned_for_revision' ? (
+                          <span className="inline-flex items-center gap-1 text-rose-700 bg-rose-50 border border-rose-200 px-2.5 py-1 rounded-lg text-[11px] font-bold shadow-2xs">
+                            <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
+                            <span>הוחזר לתיקון</span>
+                          </span>
+                        ) : isEditing ? (
                           <div className="flex items-center justify-center gap-1">
                             <button
-                              onClick={() => saveEditRow(row.id)}
-                              className="p-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition cursor-pointer"
+                              onClick={() => {
+                                if (tempAdjustedQty !== row.rawReportedQty && !tempAdjustmentReason.trim()) {
+                                  alert('חובה להזין נימוק לשינוי כמות!');
+                                  return;
+                                }
+                                onAdjustDailyRow(row.id, tempAdjustedQty, tempAdjustmentReason);
+                                setEditingRowId(null);
+                                showToast('השורה עודכנה ונשמרה בהצלחה!', 'success');
+                              }}
+                              className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition cursor-pointer shadow-xs flex items-center gap-1"
                               title="שמור שינוי"
                             >
                               <Check className="w-3.5 h-3.5" />
+                              <span>שמור</span>
                             </button>
                             <button
                               onClick={() => setEditingRowId(null)}
-                              className="p-1.5 bg-slate-400 hover:bg-slate-500 text-white rounded-lg transition cursor-pointer"
+                              className="p-1 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-xs transition cursor-pointer"
                               title="בטל"
                             >
                               <X className="w-3.5 h-3.5" />
                             </button>
                           </div>
                         ) : (
-                          <button
-                            onClick={() => startEditRow(row)}
-                            className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition cursor-pointer"
-                            title="ערוך כמות מנומקת"
-                          >
-                            <Edit3 className="w-3.5 h-3.5" />
-                          </button>
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (onApproveDailyRow) {
+                                  onApproveDailyRow(row.id);
+                                } else {
+                                  onAdjustDailyRow(row.id, row.rawReportedQty, row.notes || 'אושר ע"י רמת"ל');
+                                }
+                                showToast('השורה אושרה ונשמרה בהצלחה! 🟢', 'success');
+                              }}
+                              className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1 transition shadow-xs cursor-pointer min-h-[32px]"
+                              title="אשר שורה זו ללא שינוי"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-100" />
+                              <span>🟢 אשר שורה</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setReturnRowModalId(row.id);
+                                setRowReturnReason('');
+                              }}
+                              className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 rounded-xl text-xs font-bold flex items-center gap-1 transition shadow-2xs cursor-pointer min-h-[32px]"
+                              title="החזר שורה זו לתיקון הספק עם נימוק חובה"
+                            >
+                              <RotateCcw className="w-3.5 h-3.5 text-rose-600" />
+                              <span>🔴 החזר לתיקון</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => startEditRow(row)}
+                              className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition cursor-pointer"
+                              title="ערוך כמות מנומקת"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         )}
                       </td>
                     </tr>
@@ -439,8 +529,61 @@ export const RamtalView: React.FC<RamtalViewProps> = ({
         )}
       </div>
 
-      {/* Return Reason Modal */}
-      {returnReasonModal && currentSummary && (
+      {/* Single Row Return Reason Modal */}
+      {returnRowModalId !== null && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center z-50 p-4" dir="rtl">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl border border-slate-200 space-y-4 animate-fade-in">
+            <div className="flex items-center gap-2 text-rose-600 bg-rose-50 p-3 rounded-xl border border-rose-200">
+              <ShieldAlert className="w-5 h-5 text-rose-600" />
+              <h4 className="text-sm font-bold text-slate-900">החזרת שורת דיווח לתיקון הספק</h4>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                נימוק חובה להחזרה לתיקון (*):
+              </label>
+              <textarea
+                value={rowReturnReason}
+                onChange={(e) => setRowReturnReason(e.target.value)}
+                placeholder="פרט מדוע השורה נדרשת לתיקון (לדוגמה: אי התאמה לאסמכתא המצורפת / חוסר במנות)..."
+                rows={3}
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-xs focus:ring-2 focus:ring-rose-500 focus:outline-none font-medium"
+                required
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setReturnRowModalId(null)}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+              >
+                ביטול
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!rowReturnReason.trim()) {
+                    alert('חובה להזין נימוק להחזרה לתיקון!');
+                    return;
+                  }
+                  if (onReturnDailyRow) {
+                    onReturnDailyRow(returnRowModalId, rowReturnReason);
+                  }
+                  setReturnRowModalId(null);
+                  showToast('השורה הוחזרה לתיקון הספק בהצלחה! 🔴', 'danger');
+                }}
+                className="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-md transition cursor-pointer"
+              >
+                אישור והחזרה לתיקון
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Return Reason Modal for Month */}
+      {returnReasonModal && (effectiveSummary || currentSummary) && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl border border-slate-200">
             <div className="flex items-center gap-2 text-rose-600 mb-2">
@@ -475,9 +618,13 @@ export const RamtalView: React.FC<RamtalViewProps> = ({
                     alert('נא להזין נימוק להחזרה!');
                     return;
                   }
-                  onReturnSummary(currentSummary.id, returnText);
+                  const targetId = effectiveSummary?.id || currentSummary?.id;
+                  if (targetId) {
+                    onReturnSummary(targetId, returnText);
+                  }
                   setReturnReasonModal(false);
                   setReturnText('');
+                  showToast('הדוח החודשי הוחזר לעריכת הספק! 🔴', 'danger');
                 }}
                 className="px-4 py-2 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-lg shadow transition cursor-pointer"
               >
