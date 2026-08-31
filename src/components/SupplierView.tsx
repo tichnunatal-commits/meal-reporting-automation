@@ -424,7 +424,7 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
                     : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700'
                 }`}
               >
-                קייטרינג גורמה
+                קייטרינג גורמה ({kitchens.filter(k => k.supplierId === 1).length})
               </button>
               <button
                 type="button"
@@ -435,7 +435,7 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
                     : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700'
                 }`}
               >
-                מבושלת בע"מ
+                מבושלת בע"מ ({kitchens.filter(k => k.supplierId === 2).length})
               </button>
               <button
                 type="button"
@@ -446,7 +446,7 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
                     : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700'
                 }`}
               >
-                קייטרינג ליבר
+                קייטרינג ליבר ({kitchens.filter(k => k.supplierId === 3).length})
               </button>
               <button
                 type="button"
@@ -457,7 +457,7 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
                     : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700'
                 }`}
               >
-                סודקסו
+                סודקסו ישראל ({kitchens.filter(k => k.supplierId === 4).length})
               </button>
             </div>
           </div>

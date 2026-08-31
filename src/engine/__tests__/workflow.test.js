@@ -164,3 +164,27 @@ test('Strict Row Autonomy & No-Bleed Workflow (V4)', () => {
   assert.equal(dailyReports.length, 5);
   assert.equal(dailyReports.some(r => r.id === 205), false, 'Row 205 must be deleted completely');
 });
+
+test('Station to Supplier Mapping Distribution (124 Stations)', async () => {
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  const fileContent = fs.readFileSync(path.resolve('src/data/mockData.ts'), 'utf-8');
+  
+  const start = fileContent.indexOf('export const mockKitchens: Kitchen[] = [');
+  const end = fileContent.indexOf('];', start);
+  const kitchensJson = fileContent.substring(start + 'export const mockKitchens: Kitchen[] = '.length, end + 1);
+  const mockKitchens = JSON.parse(kitchensJson);
+
+  assert.equal(mockKitchens.length, 124, 'Total kitchens must be 124');
+  
+  const gourmet = mockKitchens.filter(k => k.supplierId === 1);
+  const mevushelet = mockKitchens.filter(k => k.supplierId === 2);
+  const liber = mockKitchens.filter(k => k.supplierId === 3);
+  const sodexo = mockKitchens.filter(k => k.supplierId === 4);
+
+  assert.equal(gourmet.length, 3, 'Gourmet must have exactly 3 stations');
+  assert.equal(mevushelet.length, 79, 'Mevushelet must have exactly 79 stations');
+  assert.equal(liber.length, 40, 'Liber must have exactly 40 stations');
+  assert.equal(sodexo.length, 2, 'Sodexo must have exactly 2 stations');
+});
+
