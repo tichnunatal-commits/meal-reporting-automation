@@ -90,20 +90,15 @@ export const RamtalView: React.FC<RamtalViewProps> = ({
   const approvedRowsInKitchen = currentReports.filter(r => r.status === 'ramtal_approved' || r.status === 'food_dept_approved');
   const kitchenApprovedSum = approvedRowsInKitchen.reduce((s, r) => s + (r.ramtalAdjustedQty !== undefined ? r.ramtalAdjustedQty : (r.rawReportedQty || 0)), 0);
 
-  // Effective summary to always display summary card even for dynamic kitchens
-  const effectiveSummary: MonthlyKitchenSummary | null = currentSummary ? {
-    ...currentSummary,
-    totalRamtalApproved: (currentSummary.status === 'ramtal_approved' || currentSummary.status === 'food_dept_approved')
-      ? (kitchenApprovedSum > 0 ? kitchenApprovedSum : currentSummary.totalRamtalApproved)
-      : kitchenApprovedSum
-  } : (selectedKitchenId > 0 && currentReports.length > 0 ? {
-    id: selectedKitchenId,
+  // 1. חישוב סטטוס המטבח וסיכום אפקטיבי אך ורק באופן דינמי 100% מתוך הדיווחים הפעילים
+  const effectiveSummary: MonthlyKitchenSummary | null = (selectedKitchenId > 0 && currentReports.length > 0) ? {
+    id: currentSummary?.id || selectedKitchenId,
     kitchenId: selectedKitchenId,
-    kitchenName: selectedKitchen ? selectedKitchen.name : `מטבח #${selectedKitchenId}`,
-    supplierId: selectedKitchen?.supplierId || 1,
-    supplierName: 'ספק מורשה',
-    periodYear: new Date().getFullYear(),
-    periodMonth: new Date().getMonth() + 1,
+    kitchenName: selectedKitchen ? selectedKitchen.name : (currentSummary?.kitchenName || `מטבח #${selectedKitchenId}`),
+    supplierId: selectedKitchen?.supplierId || currentSummary?.supplierId || 1,
+    supplierName: currentSummary?.supplierName || 'ספק מורשה',
+    periodYear: currentSummary?.periodYear || new Date().getFullYear(),
+    periodMonth: currentSummary?.periodMonth || (new Date().getMonth() + 1),
     ramtalUserId: currentUser.id,
     ramtalUserName: currentUser.fullName,
     totalReportedRaw: currentReports.reduce((s, r) => s + (r.rawReportedQty || 0), 0),
@@ -111,8 +106,12 @@ export const RamtalView: React.FC<RamtalViewProps> = ({
     calculatedNetMeals: 0,
     calculatedTotalAmountNis: 0,
     calculationAudit: [],
-    status: currentReports.some(r => r.status === 'submitted') ? 'submitted' : (currentReports[0]?.status || 'submitted')
-  } : null);
+    status: currentReports.some(r => r.status === 'submitted')
+      ? 'submitted'
+      : (currentReports.every(r => r.status === 'ramtal_approved' || r.status === 'approved' || r.status === 'food_dept_approved')
+          ? 'ramtal_approved'
+          : (currentReports[0]?.status || 'submitted'))
+  } : null;
 
   // באנר עדכונים חדשים: רק מטבחים עם שורות שממתינות לאישור בפועל
   const newlySubmittedSummaries = monthlySummaries.filter(s =>
@@ -354,9 +353,7 @@ export const RamtalView: React.FC<RamtalViewProps> = ({
             <AlertCircle className="w-8 h-8 text-amber-500 mx-auto" />
             <div className="text-xs font-bold text-slate-700">אין דיווחים שהוגשו לאישור עבור בחירה זו</div>
             <p className="text-[11px] text-slate-500 max-w-sm mx-auto">
-              {currentSummary?.status === 'draft'
-                ? 'הספק עדיין עורך את הדיווח כטיוטה וטרם ביצע סיום והגשה לרמת"ל.'
-                : 'טרם נקלטו דיווחים חודשיים בסטטוס ממתין לאישור עבור מטבח זה.'}
+              טרם נקלטו דיווחים חודשיים בסטטוס ממתין לאישור עבור מטבח זה.
             </p>
           </div>
         ) : (

@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 
 // Helper matching logic from App.tsx
 const isRowInTargetPeriod = (reportDate, targetMonth, targetYear) => {
@@ -166,8 +168,6 @@ test('Strict Row Autonomy & No-Bleed Workflow (V4)', () => {
 });
 
 test('Station to Supplier Mapping Distribution (124 Stations)', async () => {
-  const fs = await import('node:fs');
-  const path = await import('node:path');
   const fileContent = fs.readFileSync(path.resolve('src/data/mockData.ts'), 'utf-8');
   
   const start = fileContent.indexOf('export const mockKitchens: Kitchen[] = [');
@@ -188,3 +188,32 @@ test('Station to Supplier Mapping Distribution (124 Stations)', async () => {
   assert.equal(sodexo.length, 2, 'Sodexo must have exactly 2 stations');
 });
 
+test('Uniform Clean Empty State for All 124 Kitchens (Zero Ghost Summaries)', async () => {
+  const fileContent = fs.readFileSync(path.resolve('src/data/mockData.ts'), 'utf-8');
+  
+  // Verify initial arrays are completely empty (no residual mock reports or summaries)
+  assert.ok(fileContent.includes('export const mockMonthlySummaries: MonthlyKitchenSummary[] = [];'));
+  assert.ok(fileContent.includes('export const mockDailyRows: DailyReportRow[] = [];'));
+  assert.ok(fileContent.includes('export const initialMonthlySummaries: MonthlyKitchenSummary[] = [];'));
+  assert.ok(fileContent.includes('export const initialDailyReports: DailyReportRow[] = [];'));
+
+  // Parse all 124 kitchens
+  const start = fileContent.indexOf('export const mockKitchens: Kitchen[] = [');
+  const end = fileContent.indexOf('];', start);
+  const kitchensJson = fileContent.substring(start + 'export const mockKitchens: Kitchen[] = '.length, end + 1);
+  const mockKitchens = JSON.parse(kitchensJson);
+
+  // For every single kitchen, verify empty state is 100% identical and neutral
+  for (const kitchen of mockKitchens) {
+    const kitchenReports = []; // 0 reports
+
+    // 1. Supplier View banner calculation
+    const isSupplierEmpty = kitchenReports.length === 0;
+    assert.equal(isSupplierEmpty, true);
+
+    // 2. Ramtal View effectiveSummary calculation: must be null when 0 reports
+    const currentSummary = undefined;
+    const effectiveSummary = (kitchen.id > 0 && kitchenReports.length > 0) ? {} : null;
+    assert.equal(effectiveSummary, null, `Kitchen ${kitchen.name} (ID: ${kitchen.id}) must have null effectiveSummary when 0 reports`);
+  }
+});

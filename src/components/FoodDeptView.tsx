@@ -139,46 +139,56 @@ export const FoodDeptView: React.FC<FoodDeptViewProps> = ({
         </div>
 
         {/* Summaries Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {monthlySummaries.map(s => {
-            const isSelected = s.id === selectedSummaryId;
-            const kObj = kitchens.find(k => k.id === s.kitchenId);
-            const displayName = kObj ? formatKitchenDisplayName(kObj) : s.kitchenName;
+        {monthlySummaries.length === 0 ? (
+          <div className="text-center py-12 px-4 space-y-2 bg-slate-50/60 rounded-xl border border-slate-200">
+            <FileText className="w-8 h-8 text-slate-400 mx-auto" />
+            <div className="text-xs font-bold text-slate-700">אין דוחות חודשיים הממתינים לבקרת מדור מזון</div>
+            <p className="text-[11px] text-slate-500 max-w-sm mx-auto">
+              כאשר הרמת"ל יאשר דוח חודשי של תחנה, הוא יופיע כאן אוטומטית לבקרת המרות R1–R5 ואישור לתשלום.
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {monthlySummaries.map(s => {
+              const isSelected = s.id === selectedSummaryId;
+              const kObj = kitchens.find(k => k.id === s.kitchenId);
+              const displayName = kObj ? formatKitchenDisplayName(kObj) : s.kitchenName;
 
-            return (
-              <div
-                key={s.id}
-                onClick={() => setSelectedSummaryId(s.id)}
-                className={`p-4 rounded-xl border cursor-pointer transition relative ${
-                  isSelected 
-                    ? 'border-blue-600 bg-blue-50/40 shadow-sm ring-2 ring-blue-500/20' 
-                    : 'border-slate-200 hover:border-slate-300 bg-white'
-                }`}
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <span className="font-bold text-sm text-slate-800">{displayName}</span>
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                    s.status === 'food_dept_approved' ? 'bg-emerald-100 text-emerald-800' :
-                    s.status === 'ramtal_approved' ? 'bg-blue-100 text-blue-800' :
-                    'bg-amber-100 text-amber-800'
-                  }`}>
-                    {s.status === 'food_dept_approved' ? 'מאושר סופית' :
-                     s.status === 'ramtal_approved' ? 'ממתין למדור מזון' : 'בהמתנה'}
-                  </span>
-                </div>
+              return (
+                <div
+                  key={s.id}
+                  onClick={() => setSelectedSummaryId(s.id)}
+                  className={`p-4 rounded-xl border cursor-pointer transition relative ${
+                    isSelected 
+                      ? 'border-blue-600 bg-blue-50/40 shadow-sm ring-2 ring-blue-500/20' 
+                      : 'border-slate-200 hover:border-slate-300 bg-white'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-bold text-sm text-slate-800">{displayName}</span>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                      s.status === 'food_dept_approved' ? 'bg-emerald-100 text-emerald-800' :
+                      s.status === 'ramtal_approved' ? 'bg-blue-100 text-blue-800' :
+                      'bg-amber-100 text-amber-800'
+                    }`}>
+                      {s.status === 'food_dept_approved' ? 'מאושר סופית' :
+                       s.status === 'ramtal_approved' ? 'ממתין למדור מזון' : 'בהמתנה'}
+                    </span>
+                  </div>
 
-                <div className="text-xs text-slate-500 space-y-1">
-                  <div>ספק: <span className="text-slate-700 font-medium">{s.supplierName}</span></div>
-                  <div>רמת"ל מאשר: <span className="text-slate-700 font-medium">{s.ramtalUserName}</span></div>
-                  <div className="pt-2 flex items-center justify-between border-t border-slate-100 mt-2 font-mono">
-                    <span className="text-slate-400">כמות מחושבת:</span>
-                    <strong className="text-blue-700 font-bold">{s.calculatedNetMeals.toLocaleString()} מנות</strong>
+                  <div className="text-xs text-slate-500 space-y-1">
+                    <div>ספק: <span className="text-slate-700 font-medium">{s.supplierName}</span></div>
+                    <div>רמת"ל מאשר: <span className="text-slate-700 font-medium">{s.ramtalUserName}</span></div>
+                    <div className="pt-2 flex items-center justify-between border-t border-slate-100 mt-2 font-mono">
+                      <span className="text-slate-400">כמות מחושבת:</span>
+                      <strong className="text-blue-700 font-bold">{s.calculatedNetMeals.toLocaleString()} מנות</strong>
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Deep Dive: Calculation Pipeline Inspector for Selected Kitchen */}
