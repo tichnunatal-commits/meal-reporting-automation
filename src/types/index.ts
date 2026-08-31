@@ -76,6 +76,7 @@ export type SummaryStatus =
   | 'submitted'              // הוגש ע"י הספק, ממתין לרמת"ל
   | 'returned_for_revision'  // הוחזר ע"י הרמת"ל לתיקון
   | 'rejected'               // כינוי נרדף לנדרש תיקון
+  | 'deleted_by_supplier'    // נמחק ע"י הספק לאחר דחיית רמת"ל (תיעוד Audit)
   | 'ramtal_approved'        // אושר ע"י הרמת"ל, עבר למדור מזון
   | 'approved'               // כינוי נרדף למאושר
   | 'food_dept_approved'     // אושר סופית ע"י מדור מזון

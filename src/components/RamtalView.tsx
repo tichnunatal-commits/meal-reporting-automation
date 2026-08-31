@@ -13,7 +13,8 @@ import {
   Paperclip,
   Clock,
   AlertTriangle,
-  Building2
+  Building2,
+  Trash2
 } from 'lucide-react';
 import { SearchableKitchenSelect, formatKitchenDisplayName } from './SearchableKitchenSelect';
 
@@ -140,6 +141,15 @@ export const RamtalView: React.FC<RamtalViewProps> = ({
   const getStatusBadge = (row: DailyReportRow) => {
     const s = row.status || 'submitted';
 
+    if (s === 'deleted_by_supplier') {
+      return (
+        <span className="inline-flex items-center gap-1 bg-slate-200 text-slate-700 border border-slate-400 font-bold px-2.5 py-0.5 rounded-full text-[10px]">
+          <Trash2 className="w-3 h-3 text-slate-500 shrink-0" />
+          <span>🗑️ נמחק ע"י הספק</span>
+        </span>
+      );
+    }
+
     if (s === 'returned_for_revision' || s === 'rejected') {
       return (
         <span className="inline-flex items-center gap-1 bg-rose-100 text-rose-800 border border-rose-300 font-bold px-2.5 py-0.5 rounded-full text-[10px]">
@@ -180,7 +190,8 @@ export const RamtalView: React.FC<RamtalViewProps> = ({
     return k ? formatKitchenDisplayName(k) : `מטבח #${kId}`;
   };
 
-  const totalReportedAll = currentReports.reduce((acc, curr) => acc + (curr.rawReportedQty || 0), 0);
+  const activeReports = currentReports.filter(r => r.status !== 'deleted_by_supplier');
+  const totalReportedAll = activeReports.reduce((acc, curr) => acc + (curr.rawReportedQty || 0), 0);
   const totalApprovedAll = currentReports
     .filter(r => r.status === 'ramtal_approved' || r.status === 'approved' || r.status === 'food_dept_approved')
     .reduce((acc, curr) => acc + (curr.ramtalAdjustedQty !== undefined ? curr.ramtalAdjustedQty : (curr.rawReportedQty || 0)), 0);
@@ -377,10 +388,11 @@ export const RamtalView: React.FC<RamtalViewProps> = ({
                 {currentReports.map(row => {
                   const isEditing = editingRowId === row.id;
                   const isTr = isTransportMeal(row.mealTypeId, row.mealTypeName);
+                  const isDeletedBySupplier = row.status === 'deleted_by_supplier';
                   const hasDiscrepancy = row.ramtalAdjustedQty !== undefined && row.ramtalAdjustedQty !== row.rawReportedQty;
 
                   return (
-                    <tr key={row.id} className={hasDiscrepancy ? 'bg-amber-50/60' : 'hover:bg-slate-50 transition'}>
+                    <tr key={row.id} className={isDeletedBySupplier ? 'bg-slate-100/60 opacity-60' : hasDiscrepancy ? 'bg-amber-50/60' : 'hover:bg-slate-50 transition'}>
                       <td className="p-3 font-medium text-slate-800">{row.reportDate}</td>
                       
                       {selectedKitchenId === 0 && (
@@ -411,8 +423,8 @@ export const RamtalView: React.FC<RamtalViewProps> = ({
                             {isTr && <span>ק"מ</span>}
                           </div>
                         ) : (
-                          <span className={hasDiscrepancy ? 'text-rose-600 font-extrabold' : 'text-emerald-700'}>
-                            {row.ramtalAdjustedQty !== undefined ? row.ramtalAdjustedQty : row.rawReportedQty} {isTr ? 'ק"מ' : ''}
+                          <span className={isDeletedBySupplier ? 'text-slate-400' : hasDiscrepancy ? 'text-rose-600 font-extrabold' : 'text-emerald-700'}>
+                            {isDeletedBySupplier ? '-' : `${row.ramtalAdjustedQty !== undefined ? row.ramtalAdjustedQty : row.rawReportedQty} ${isTr ? 'ק"מ' : ''}`}
                           </span>
                         )}
                       </td>
@@ -449,7 +461,12 @@ export const RamtalView: React.FC<RamtalViewProps> = ({
 
                       {/* Actions */}
                       <td className="p-3 text-center">
-                        {row.status === 'ramtal_approved' || row.status === 'approved' || row.status === 'food_dept_approved' ? (
+                        {row.status === 'deleted_by_supplier' ? (
+                          <span className="inline-flex items-center gap-1 text-slate-600 bg-slate-200/80 border border-slate-300 px-2.5 py-1 rounded-lg text-[11px] font-bold shadow-2xs">
+                            <Trash2 className="w-3.5 h-3.5 text-slate-500" />
+                            <span>נמחק ע"י הספק (תיעוד)</span>
+                          </span>
+                        ) : row.status === 'ramtal_approved' || row.status === 'approved' || row.status === 'food_dept_approved' ? (
                           <span className="inline-flex items-center gap-1 text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg text-[11px] font-bold shadow-2xs">
                             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                             <span>מאושר (ננעל)</span>

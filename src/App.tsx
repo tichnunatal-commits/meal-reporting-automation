@@ -322,7 +322,17 @@ export const App: React.FC = () => {
     const target = dailyReports.find(r => r.id === rowId);
     if (!target) return;
 
-    setDailyReports(prev => prev.filter(r => r.id !== rowId));
+    const isRevision = target.status === 'returned_for_revision' || target.status === 'rejected';
+
+    if (isRevision) {
+      // 1. תיעוד מחיקת שורות שהוחזרו לתיקון (Audit Trail במסך הרמת"ל)
+      // במסך הספק: השורה מוסרת (סטטוס deleted_by_supplier)
+      // במסך הרמת"ל: השורה נשמרת בסטטוס deleted_by_supplier כ-Audit Log
+      setDailyReports(prev => prev.map(r => r.id === rowId ? { ...r, status: 'deleted_by_supplier' as const } : r));
+    } else {
+      // טיוטה רגילה של ספק נמחקת לחלוטין
+      setDailyReports(prev => prev.filter(r => r.id !== rowId));
+    }
 
     setMonthlySummaries(prev => prev.map(s => {
       if (s.kitchenId === target.kitchenId) {
@@ -649,8 +659,28 @@ export const App: React.FC = () => {
     handleLogout();
   };
 
-  // 4. פעולות איפוס ומחיקה של מנהל מערכת בלבד (Admin / zeev)
-  const handleAdminResetDrafts = ({ kitchenId, filterType }: { kitchenId?: number; filterType: 'today' | 'month' | 'all' }) => {
+  // 4. פעולות איפוס ומחיקה של מנהל מערכת בלבד (Admin / zeev) - 3 היקפי פעולה מוגדרים
+  const isKitchenInScope = (kId: number, scope: 'current_kitchen' | 'current_supplier' | 'all_kitchens', targetKitchenId?: number, targetSupplierId?: number) => {
+    if (scope === 'all_kitchens') return true;
+    if (scope === 'current_kitchen') return targetKitchenId !== undefined && kId === targetKitchenId;
+    if (scope === 'current_supplier') {
+      const k = kitchens.find(item => item.id === kId);
+      return k?.supplierId === targetSupplierId;
+    }
+    return true;
+  };
+
+  const handleAdminResetDrafts = ({
+    scope = 'all_kitchens',
+    kitchenId,
+    supplierId,
+    filterType
+  }: {
+    scope?: 'current_kitchen' | 'current_supplier' | 'all_kitchens';
+    kitchenId?: number;
+    supplierId?: number;
+    filterType: 'today' | 'month' | 'all';
+  }) => {
     const todayStr = new Date().toISOString().split('T')[0];
     const currentMonthPrefix = todayStr.substring(0, 7);
 
@@ -658,7 +688,7 @@ export const App: React.FC = () => {
       const filtered = prev.filter(row => {
         const isDraft = (row.status || 'draft') === 'draft';
         if (!isDraft) return true; // Keep submitted / approved rows
-        if (kitchenId !== undefined && row.kitchenId !== kitchenId) return true;
+        if (!isKitchenInScope(row.kitchenId, scope, kitchenId, supplierId)) return true;
         if (filterType === 'today' && row.reportDate !== todayStr) return true;
         if (filterType === 'month' && !row.reportDate.startsWith(currentMonthPrefix)) return true;
         return false; // Delete matching draft
@@ -672,11 +702,21 @@ export const App: React.FC = () => {
     });
   };
 
-  const handleAdminDeleteAllReports = ({ kitchenId, filterType }: { kitchenId?: number; filterType: 'today' | 'month' | 'all' }) => {
+  const handleAdminDeleteAllReports = ({
+    scope = 'all_kitchens',
+    kitchenId,
+    supplierId,
+    filterType
+  }: {
+    scope?: 'current_kitchen' | 'current_supplier' | 'all_kitchens';
+    kitchenId?: number;
+    supplierId?: number;
+    filterType: 'today' | 'month' | 'all';
+  }) => {
     const todayStr = new Date().toISOString().split('T')[0];
     const currentMonthPrefix = todayStr.substring(0, 7);
 
-    if (kitchenId === undefined && filterType === 'all') {
+    if (scope === 'all_kitchens' && filterType === 'all') {
       // 1. איפוס מוחלט (Master Reset) ל-0 שורות ו-0 סיכומים במערכת
       setDailyReports([]);
       setMonthlySummaries([]);
@@ -691,7 +731,7 @@ export const App: React.FC = () => {
 
     setDailyReports(prev => {
       const filtered = prev.filter(row => {
-        if (kitchenId !== undefined && row.kitchenId !== kitchenId) return true;
+        if (!isKitchenInScope(row.kitchenId, scope, kitchenId, supplierId)) return true;
         if (filterType === 'today' && row.reportDate !== todayStr) return true;
         if (filterType === 'month' && !row.reportDate.startsWith(currentMonthPrefix)) return true;
         return false; // Delete matching report
@@ -706,20 +746,11 @@ export const App: React.FC = () => {
 
     // Reset summaries for matching kitchens
     setMonthlySummaries(prev => {
-      const updated = prev.map(s => {
-        if (kitchenId !== undefined && s.kitchenId !== kitchenId) return s;
-        return {
-          ...s,
-          status: 'draft' as const,
-          totalReportedRaw: 0,
-          totalRamtalApproved: 0,
-          calculatedNetMeals: 0,
-          calculatedTotalAmountNis: 0,
-          submittedAt: undefined,
-          ramtalApprovedAt: undefined,
-          foodDeptApprovedAt: undefined,
-          revisionReason: undefined
-        };
+      const updated = prev.filter(s => {
+        if (isKitchenInScope(s.kitchenId, scope, kitchenId, supplierId)) {
+          if (filterType === 'all') return false; // wipe summary for scope
+        }
+        return true;
       });
       try {
         localStorage.setItem(SUMMARIES_STORAGE_KEY, JSON.stringify(updated));

@@ -35,8 +35,8 @@ interface SupplierViewProps {
   onDuplicateDailyReport?: (rowId: number) => void;
   onDeleteDailyReport?: (rowId: number) => void;
   onSubmitMonth: (options: { kitchenId: number; month: number; year: number; summaryId?: number }) => void;
-  onAdminResetDrafts?: (options: { kitchenId?: number; filterType: 'today' | 'month' | 'all' }) => void;
-  onAdminDeleteAllReports?: (options: { kitchenId?: number; filterType: 'today' | 'month' | 'all' }) => void;
+  onAdminResetDrafts?: (options: { scope?: 'current_kitchen' | 'current_supplier' | 'all_kitchens'; kitchenId?: number; supplierId?: number; filterType: 'today' | 'month' | 'all' }) => void;
+  onAdminDeleteAllReports?: (options: { scope?: 'current_kitchen' | 'current_supplier' | 'all_kitchens'; kitchenId?: number; supplierId?: number; filterType: 'today' | 'month' | 'all' }) => void;
 }
 
 export const SupplierView: React.FC<SupplierViewProps> = ({
@@ -79,7 +79,7 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
 
   const selectedKitchen = kitchens.find(k => k.id === selectedKitchenId);
   const currentSummary = monthlySummaries.find(s => s.kitchenId === selectedKitchenId);
-  const currentReports = dailyReports.filter(r => r.kitchenId === selectedKitchenId);
+  const currentReports = dailyReports.filter(r => r.kitchenId === selectedKitchenId && r.status !== 'deleted_by_supplier');
   const isMonthSubmitted = currentSummary?.status === 'submitted' || currentSummary?.status === 'ramtal_approved' || currentSummary?.status === 'food_dept_approved' || currentSummary?.status === 'locked';
 
   // Form states
@@ -115,7 +115,7 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
   const [showSubmitConfirmModal, setShowSubmitConfirmModal] = useState<boolean>(false);
 
   // Admin Panel states
-  const [adminFilterScope, setAdminFilterScope] = useState<'current_kitchen' | 'all_kitchens'>('current_kitchen');
+  const [adminFilterScope, setAdminFilterScope] = useState<'current_kitchen' | 'current_supplier' | 'all_kitchens'>('current_kitchen');
   const [adminFilterTime, setAdminFilterTime] = useState<'today' | 'month' | 'all'>('month');
   const [showResetDraftsModal, setShowResetDraftsModal] = useState<boolean>(false);
   const [showDeleteAllModal, setShowDeleteAllModal] = useState<boolean>(false);
@@ -361,7 +361,8 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
                 className="bg-slate-800 border border-slate-600 rounded-xl px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-amber-400 font-medium"
               >
                 <option value="current_kitchen">מטבח נוכחי בלבד ({selectedKitchen?.name})</option>
-                <option value="all_kitchens">כל המטבחים במערכת (גלובלי)</option>
+                <option value="current_supplier">כל המטבחים של הספק הנוכחי ({adminSupplierFilter !== 'all' ? (adminSupplierFilter === 1 ? 'קייטרינג גורמה (3 תחנות)' : adminSupplierFilter === 2 ? 'מבושלת בע"מ (79 תחנות)' : adminSupplierFilter === 3 ? 'קייטרינג ליבר (40 תחנות)' : 'סודקסו ישראל (2 תחנות)') : `${selectedKitchen?.supplierId === 1 ? 'קייטרינג גורמה (3 תחנות)' : selectedKitchen?.supplierId === 2 ? 'מבושלת בע"מ (79 תחנות)' : selectedKitchen?.supplierId === 3 ? 'קייטרינג ליבר (40 תחנות)' : 'סודקסו ישראל (2 תחנות)'}`})</option>
+                <option value="all_kitchens">כל 124 המטבחים במערכת (גלובלי)</option>
               </select>
             </div>
           </div>
@@ -1323,7 +1324,7 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
               </div>
 
               <div className="pt-2 mt-2 border-t border-slate-200 text-[11px] text-slate-500">
-                היקף איפוס: <strong>{adminFilterScope === 'current_kitchen' ? `מטבח ${selectedKitchen?.name} בלבד` : 'כל 124 המטבחים'}</strong>
+                היקף איפוס: <strong>{adminFilterScope === 'current_kitchen' ? `מטבח ${selectedKitchen?.name} בלבד` : adminFilterScope === 'current_supplier' ? `כל המטבחים של הספק הנוכחי` : 'כל 124 המטבחים במערכת'}</strong>
               </div>
             </div>
 
@@ -1338,9 +1339,12 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
               <button
                 type="button"
                 onClick={() => {
+                  const targetSupplierId = adminSupplierFilter !== 'all' ? adminSupplierFilter : (selectedKitchen?.supplierId || 1);
                   if (onAdminResetDrafts) {
                     onAdminResetDrafts({
+                      scope: adminFilterScope,
                       kitchenId: adminFilterScope === 'current_kitchen' ? selectedKitchenId : undefined,
+                      supplierId: adminFilterScope === 'current_supplier' ? targetSupplierId : undefined,
                       filterType: adminFilterTime
                     });
                   }
@@ -1406,7 +1410,7 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
               </div>
 
               <div className="pt-2 mt-2 border-t border-slate-200 text-[11px] text-slate-500">
-                היקף מחיקה: <strong>{adminFilterScope === 'current_kitchen' ? `מטבח ${selectedKitchen?.name} בלבד` : 'כל 124 המטבחים במערכת'}</strong>
+                היקף מחיקה: <strong>{adminFilterScope === 'current_kitchen' ? `מטבח ${selectedKitchen?.name} בלבד` : adminFilterScope === 'current_supplier' ? `כל המטבחים של הספק הנוכחי` : 'כל 124 המטבחים במערכת'}</strong>
               </div>
             </div>
 
@@ -1438,9 +1442,12 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
                 type="button"
                 disabled={masterDeleteConfirmText.trim() !== 'אישור'}
                 onClick={() => {
+                  const targetSupplierId = adminSupplierFilter !== 'all' ? adminSupplierFilter : (selectedKitchen?.supplierId || 1);
                   if (onAdminDeleteAllReports) {
                     onAdminDeleteAllReports({
+                      scope: adminFilterScope,
                       kitchenId: adminFilterScope === 'current_kitchen' ? selectedKitchenId : undefined,
+                      supplierId: adminFilterScope === 'current_supplier' ? targetSupplierId : undefined,
                       filterType: adminFilterTime
                     });
                   }

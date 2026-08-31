@@ -39,17 +39,18 @@ test('Strict Row Autonomy & No-Bleed Workflow (V4)', () => {
   // Helper row locking check
   const isRowLocked = (row) => {
     const s = row.status || 'draft';
-    return s === 'submitted' || s === 'ramtal_approved' || s === 'approved' || s === 'food_dept_approved';
+    return s === 'submitted' || s === 'ramtal_approved' || s === 'approved' || s === 'food_dept_approved' || s === 'deleted_by_supplier';
   };
 
   // Helper banner status computer
   const computeBannerStatus = (reports) => {
-    if (reports.length === 0) {
+    const active = reports.filter(r => r.status !== 'deleted_by_supplier');
+    if (active.length === 0) {
       return { title: 'אין שורות דיווח שנרשמו לחודש זה', type: 'empty' };
     }
-    const hasReturned = reports.some(r => r.status === 'returned_for_revision' || r.status === 'rejected');
-    const hasSubmitted = reports.some(r => r.status === 'submitted');
-    const allApproved = reports.length > 0 && reports.every(r => r.status === 'ramtal_approved' || r.status === 'approved' || r.status === 'food_dept_approved');
+    const hasReturned = active.some(r => r.status === 'returned_for_revision' || r.status === 'rejected');
+    const hasSubmitted = active.some(r => r.status === 'submitted');
+    const allApproved = active.length > 0 && active.every(r => r.status === 'ramtal_approved' || r.status === 'approved' || r.status === 'food_dept_approved');
 
     if (hasReturned) return { title: 'קיימות שורות שנדרשו לתיקון', type: 'revision' };
     if (allApproved) return { title: 'הדו"ח אושר ע"י רמת"ל', type: 'approved' };
@@ -160,11 +161,85 @@ test('Strict Row Autonomy & No-Bleed Workflow (V4)', () => {
 
   assert.equal(dailyReports.find(r => r.id === 206).status, 'submitted');
   assert.equal(dailyReports.find(r => r.id === 205).status, 'returned_for_revision', 'Row 205 must NOT be overwritten by month submit');
+});
 
-  // 6. מחיקת שורה בסטטוס נדרש תיקון ע"י הספק (Issue 3)
-  dailyReports = dailyReports.filter(r => r.id !== 205);
-  assert.equal(dailyReports.length, 5);
-  assert.equal(dailyReports.some(r => r.id === 205), false, 'Row 205 must be deleted completely');
+test('Audit Trail for Supplier-Deleted Rejected Rows (V5)', () => {
+  // שורה שהוחזרה לתיקון
+  let dailyReports = [
+    {
+      id: 301,
+      kitchenId: 1,
+      reportDate: '2026-08-01',
+      mealTypeId: 2,
+      rawReportedQty: 50,
+      status: 'returned_for_revision',
+      ramtalAdjustmentReason: 'לא מופיע בפקודת מבצע'
+    }
+  ];
+
+  // ספק מוחק את השורה שהוחזרה לתיקון
+  const rowIdToDelete = 301;
+  const target = dailyReports.find(r => r.id === rowIdToDelete);
+  const isRevision = target.status === 'returned_for_revision' || target.status === 'rejected';
+
+  if (isRevision) {
+    dailyReports = dailyReports.map(r => r.id === rowIdToDelete ? { ...r, status: 'deleted_by_supplier' } : r);
+  } else {
+    dailyReports = dailyReports.filter(r => r.id !== rowIdToDelete);
+  }
+
+  // 1. במסך הספק: השורה מוסרת מתצוגת הדיווחים הפעילה
+  const supplierViewReports = dailyReports.filter(r => r.status !== 'deleted_by_supplier');
+  assert.equal(supplierViewReports.length, 0, 'Supplier view must NOT show deleted_by_supplier row');
+
+  // 2. במסך הרמת"ל: השורה נשמרת בסטטוס deleted_by_supplier לתיעוד Audit Trail
+  const ramtalViewReports = dailyReports.filter(r => (r.status || 'draft') !== 'draft');
+  assert.equal(ramtalViewReports.length, 1, 'Ramtal view must retain deleted_by_supplier row for audit log');
+  assert.equal(ramtalViewReports[0].status, 'deleted_by_supplier');
+
+  // 3. כמות מאושרת היא 0
+  const approvedTotal = ramtalViewReports
+    .filter(r => r.status === 'ramtal_approved' || r.status === 'approved' || r.status === 'food_dept_approved')
+    .reduce((acc, curr) => acc + curr.rawReportedQty, 0);
+  assert.equal(approvedTotal, 0, 'Deleted row contributes 0 to approved meals');
+});
+
+test('Admin Reset & Delete Scope Options (Current Kitchen, Supplier, All 124)', () => {
+  const kitchens = [
+    { id: 1, name: 'בית שאן', supplierId: 2 },
+    { id: 2, name: 'טבריה', supplierId: 2 },
+    { id: 115, name: 'מכמש', supplierId: 1 }
+  ];
+
+  const isKitchenInScope = (kId, scope, targetKitchenId, targetSupplierId) => {
+    if (scope === 'all_kitchens') return true;
+    if (scope === 'current_kitchen') return targetKitchenId !== undefined && kId === targetKitchenId;
+    if (scope === 'current_supplier') {
+      const k = kitchens.find(item => item.id === kId);
+      return k?.supplierId === targetSupplierId;
+    }
+    return true;
+  };
+
+  let reports = [
+    { id: 1, kitchenId: 1, reportDate: '2026-08-01', status: 'draft' },
+    { id: 2, kitchenId: 2, reportDate: '2026-08-01', status: 'draft' },
+    { id: 3, kitchenId: 115, reportDate: '2026-08-01', status: 'draft' }
+  ];
+
+  // 1. היקף מטבח נוכחי בלבד (בית שאן - ID 1)
+  let test1 = reports.filter(r => !isKitchenInScope(r.kitchenId, 'current_kitchen', 1, undefined));
+  assert.equal(test1.length, 2);
+  assert.equal(test1.some(r => r.kitchenId === 1), false);
+
+  // 2. היקף כל מטבחי הספק הנוכחי (מבושלת - supplierId 2: כולל מטבח 1 ו-2)
+  let test2 = reports.filter(r => !isKitchenInScope(r.kitchenId, 'current_supplier', undefined, 2));
+  assert.equal(test2.length, 1);
+  assert.equal(test2[0].kitchenId, 115, 'Only supplier 1 kitchen remains');
+
+  // 3. היקף כל המטבחים (גלובלי)
+  let test3 = reports.filter(r => !isKitchenInScope(r.kitchenId, 'all_kitchens', undefined, undefined));
+  assert.equal(test3.length, 0, 'All reports cleared');
 });
 
 test('Station to Supplier Mapping Distribution (124 Stations)', async () => {
@@ -191,27 +266,22 @@ test('Station to Supplier Mapping Distribution (124 Stations)', async () => {
 test('Uniform Clean Empty State for All 124 Kitchens (Zero Ghost Summaries)', async () => {
   const fileContent = fs.readFileSync(path.resolve('src/data/mockData.ts'), 'utf-8');
   
-  // Verify initial arrays are completely empty (no residual mock reports or summaries)
   assert.ok(fileContent.includes('export const mockMonthlySummaries: MonthlyKitchenSummary[] = [];'));
   assert.ok(fileContent.includes('export const mockDailyRows: DailyReportRow[] = [];'));
   assert.ok(fileContent.includes('export const initialMonthlySummaries: MonthlyKitchenSummary[] = [];'));
   assert.ok(fileContent.includes('export const initialDailyReports: DailyReportRow[] = [];'));
 
-  // Parse all 124 kitchens
   const start = fileContent.indexOf('export const mockKitchens: Kitchen[] = [');
   const end = fileContent.indexOf('];', start);
   const kitchensJson = fileContent.substring(start + 'export const mockKitchens: Kitchen[] = '.length, end + 1);
   const mockKitchens = JSON.parse(kitchensJson);
 
-  // For every single kitchen, verify empty state is 100% identical and neutral
   for (const kitchen of mockKitchens) {
-    const kitchenReports = []; // 0 reports
+    const kitchenReports = [];
 
-    // 1. Supplier View banner calculation
     const isSupplierEmpty = kitchenReports.length === 0;
     assert.equal(isSupplierEmpty, true);
 
-    // 2. Ramtal View effectiveSummary calculation: must be null when 0 reports
     const currentSummary = undefined;
     const effectiveSummary = (kitchen.id > 0 && kitchenReports.length > 0) ? {} : null;
     assert.equal(effectiveSummary, null, `Kitchen ${kitchen.name} (ID: ${kitchen.id}) must have null effectiveSummary when 0 reports`);
