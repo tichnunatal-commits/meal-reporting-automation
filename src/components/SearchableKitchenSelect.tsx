@@ -10,6 +10,8 @@ interface SearchableKitchenSelectProps {
   placeholder?: string;
   className?: string;
   themeColor?: 'blue' | 'emerald' | 'purple';
+  allowAllOption?: boolean;
+  allOptionLabel?: string;
 }
 
 export const formatKitchenDisplayName = (k: { name: string; cluster?: string; region?: string }): string => {
@@ -25,14 +27,17 @@ export const SearchableKitchenSelect: React.FC<SearchableKitchenSelectProps> = (
   label,
   placeholder = 'חפש תחנה או אשכול...',
   className = '',
-  themeColor = 'blue'
+  themeColor = 'blue',
+  allowAllOption = false,
+  allOptionLabel = 'כל המטבחים שבטיפולי'
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  const selectedKitchen = kitchens.find(k => k.id === selectedKitchenId) || kitchens[0];
+  const isAllSelected = allowAllOption && selectedKitchenId === 0;
+  const selectedKitchen = kitchens.find(k => k.id === selectedKitchenId) || (allowAllOption ? null : kitchens[0]);
 
   // Close on outside click
   useEffect(() => {
@@ -91,7 +96,7 @@ export const SearchableKitchenSelect: React.FC<SearchableKitchenSelectProps> = (
         }`}
       >
         <span className="truncate font-semibold text-slate-900">
-          {selectedKitchen ? formatKitchenDisplayName(selectedKitchen) : 'בחר תחנה...'}
+          {isAllSelected ? allOptionLabel : (selectedKitchen ? formatKitchenDisplayName(selectedKitchen) : 'בחר תחנה...')}
         </span>
         <ChevronDown className={`w-4 h-4 text-slate-400 shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
@@ -126,6 +131,23 @@ export const SearchableKitchenSelect: React.FC<SearchableKitchenSelectProps> = (
 
           {/* Options List */}
           <div className="overflow-y-auto divide-y divide-slate-50 p-1 flex-1">
+            {allowAllOption && !searchQuery && (
+              <button
+                type="button"
+                onClick={() => {
+                  onChange(0);
+                  setIsOpen(false);
+                  setSearchQuery('');
+                }}
+                className={`w-full text-right px-3 py-2 rounded-xl text-xs sm:text-sm flex items-center justify-between gap-2 transition cursor-pointer mb-1 border border-slate-200/80 ${
+                  isAllSelected ? activeOptionBgClass : 'hover:bg-slate-50 text-slate-800 font-bold bg-slate-50/50'
+                }`}
+              >
+                <span className="truncate">🏛️ {allOptionLabel} ({kitchens.length})</span>
+                {isAllSelected && <Check className={`w-4 h-4 shrink-0 ${checkColorClass}`} />}
+              </button>
+            )}
+
             {filteredKitchens.length === 0 ? (
               <div className="p-4 text-center text-xs text-slate-400">
                 לא נמצאו תחנות תואמות ל-"<strong>{searchQuery}</strong>"

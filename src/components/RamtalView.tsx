@@ -1,6 +1,20 @@
 import React, { useState } from 'react';
 import { DailyReportRow, Kitchen, MonthlyKitchenSummary, User } from '../types';
-import { CheckCircle2, RotateCcw, AlertCircle, Edit3, ShieldAlert, FileText, Check, X, Bell, Paperclip } from 'lucide-react';
+import {
+  CheckCircle2,
+  RotateCcw,
+  AlertCircle,
+  Edit3,
+  ShieldAlert,
+  FileText,
+  Check,
+  X,
+  Bell,
+  Paperclip,
+  Clock,
+  AlertTriangle,
+  Building2
+} from 'lucide-react';
 import { SearchableKitchenSelect, formatKitchenDisplayName } from './SearchableKitchenSelect';
 
 interface RamtalViewProps {
@@ -27,11 +41,17 @@ export const RamtalView: React.FC<RamtalViewProps> = ({
     if (clusterComp !== 0) return clusterComp;
     return a.name.localeCompare(b.name, 'he');
   });
-  const [selectedKitchenId, setSelectedKitchenId] = useState<number>(sortedKitchens[0]?.id || 1);
+
+  // Default to 0 (All Kitchens) or first pending kitchen
+  const [selectedKitchenId, setSelectedKitchenId] = useState<number>(() => {
+    const firstPending = monthlySummaries.find(s => s.status === 'submitted');
+    return firstPending ? firstPending.kitchenId : 0;
+  });
+
   const [returnReasonModal, setReturnReasonModal] = useState<boolean>(false);
   const [returnText, setReturnText] = useState<string>('');
 
-  // עריכת כמות נקודתית בשורה
+  // Inline Row Editing states
   const [editingRowId, setEditingRowId] = useState<number | null>(null);
   const [tempAdjustedQty, setTempAdjustedQty] = useState<number>(0);
   const [tempAdjustmentReason, setTempAdjustmentReason] = useState<string>('');
@@ -39,12 +59,19 @@ export const RamtalView: React.FC<RamtalViewProps> = ({
   const currentSummary = monthlySummaries.find(s => s.kitchenId === selectedKitchenId);
   const selectedKitchen = kitchens.find(k => k.id === selectedKitchenId);
 
-  // 8. הסתרת טיוטות: מסך הרמת"ל יציג רק שורות שהוגשו (ממתין לאישור רמת"ל / מאושר / לתקן)
+  // 6. סינון דיווחים מדויק (כולל קריאה מלאה ישירות מ-dailyReports ו-localStorage)
   const isSummarySubmitted = currentSummary?.status === 'submitted' || currentSummary?.status === 'ramtal_approved' || currentSummary?.status === 'food_dept_approved' || currentSummary?.status === 'returned_for_revision';
-  const currentReports = dailyReports.filter(r => 
-    r.kitchenId === selectedKitchenId && 
-    (r.status === 'submitted' || r.status === 'ramtal_approved' || r.status === 'food_dept_approved' || r.status === 'returned_for_revision' || isSummarySubmitted)
-  );
+
+  const currentReports = dailyReports.filter(r => {
+    // 6. הסתרת טיוטות: מסך הרמת"ל יציג רק שורות שהוגשו (ממתין לאישור רמת"ל / מאושר / נדרש תיקון)
+    const isSubmittedRow = r.status === 'submitted' || r.status === 'ramtal_approved' || r.status === 'food_dept_approved' || r.status === 'returned_for_revision';
+    const isKitchenSummarySubmitted = monthlySummaries.some(s => s.kitchenId === r.kitchenId && s.status !== 'draft');
+
+    if (selectedKitchenId === 0) {
+      return isSubmittedRow || isKitchenSummarySubmitted;
+    }
+    return r.kitchenId === selectedKitchenId && (isSubmittedRow || isSummarySubmitted);
+  });
 
   // באנר עדכונים חדשים עם נקודה זוהרת
   const newlySubmittedSummaries = monthlySummaries.filter(s => s.status === 'submitted');
@@ -66,6 +93,53 @@ export const RamtalView: React.FC<RamtalViewProps> = ({
     onAdjustDailyRow(rowId, tempAdjustedQty, tempAdjustmentReason);
     setEditingRowId(null);
   };
+
+  // 3. איפוס ודיוק 4 הסטטוסים
+  const getStatusBadge = (row: DailyReportRow) => {
+    const s = row.status || 'submitted';
+
+    if (s === 'returned_for_revision') {
+      return (
+        <span className="inline-flex items-center gap-1 bg-rose-100 text-rose-800 border border-rose-300 font-bold px-2.5 py-0.5 rounded-full text-[10px]">
+          <AlertTriangle className="w-3 h-3 text-rose-600 shrink-0" />
+          <span>נדרש תיקון</span>
+        </span>
+      );
+    }
+
+    if (s === 'submitted') {
+      return (
+        <span className="inline-flex items-center gap-1 bg-blue-100 text-blue-800 border border-blue-300 font-bold px-2.5 py-0.5 rounded-full text-[10px]">
+          <Clock className="w-3 h-3 text-blue-600 shrink-0" />
+          <span>ממתין לאישור רמת"ל</span>
+        </span>
+      );
+    }
+
+    if (s === 'ramtal_approved' || s === 'food_dept_approved') {
+      return (
+        <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold px-2.5 py-0.5 rounded-full text-[10px]">
+          <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
+          <span>מאושר</span>
+        </span>
+      );
+    }
+
+    return (
+      <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-800 border border-amber-300 font-bold px-2.5 py-0.5 rounded-full text-[10px]">
+        <FileText className="w-3 h-3 text-amber-600 shrink-0" />
+        <span>טיוטה</span>
+      </span>
+    );
+  };
+
+  const getKitchenName = (kId: number) => {
+    const k = kitchens.find(k => k.id === kId);
+    return k ? formatKitchenDisplayName(k) : `מטבח #${kId}`;
+  };
+
+  const totalReportedAll = currentReports.reduce((acc, curr) => acc + (curr.rawReportedQty || 0), 0);
+  const totalApprovedAll = currentReports.reduce((acc, curr) => acc + (curr.ramtalAdjustedQty !== undefined ? curr.ramtalAdjustedQty : curr.rawReportedQty), 0);
 
   return (
     <div className="space-y-6">
@@ -100,7 +174,7 @@ export const RamtalView: React.FC<RamtalViewProps> = ({
       )}
 
       {/* Top Banner */}
-      <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
             ממשק רמת"ל / מפקח הסעדה משטרתי
@@ -117,12 +191,32 @@ export const RamtalView: React.FC<RamtalViewProps> = ({
             selectedKitchenId={selectedKitchenId}
             onChange={setSelectedKitchenId}
             themeColor="emerald"
+            allowAllOption={true}
+            allOptionLabel="כל המטבחים שבטיפולי"
           />
         </div>
       </div>
 
       {/* Summary KPI & Action Header */}
-      {currentSummary && (
+      {selectedKitchenId === 0 ? (
+        <div className="bg-gradient-to-r from-slate-900 to-slate-800 text-white p-6 rounded-2xl shadow-md flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <Building2 className="w-5 h-5 text-emerald-400" />
+              <h3 className="text-lg font-bold">כלל המטבחים והתחנות שבטיפולך ({kitchens.length} תחנות)</h3>
+            </div>
+            <div className="flex flex-wrap items-center gap-6 text-xs text-slate-300 pt-2">
+              <div>סה"כ שורות שהוגשו לבדיקה: <strong className="text-white text-sm">{currentReports.length}</strong></div>
+              <div>סה"כ מנות שדווחו ע"י ספקים: <strong className="text-white text-sm">{totalReportedAll.toLocaleString()}</strong></div>
+              <div>סה"כ כמות מאושרת: <strong className="text-emerald-400 text-sm">{totalApprovedAll.toLocaleString()}</strong></div>
+              <div>מטבחים הממתינים לאישור סופי: <strong className="text-blue-300 text-sm">{newlySubmittedSummaries.length}</strong></div>
+            </div>
+          </div>
+          <div className="text-xs text-slate-300 bg-slate-800/80 border border-slate-700 px-4 py-2 rounded-xl">
+            בחר תחנה ספציפית בתפריט לעיל לאישור/החזרה של דוח חודשי שלם
+          </div>
+        </div>
+      ) : currentSummary ? (
         <div className="bg-gradient-to-r from-slate-900 to-slate-800 text-white p-6 rounded-2xl shadow-md flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
@@ -133,13 +227,15 @@ export const RamtalView: React.FC<RamtalViewProps> = ({
                 {currentSummary.supplierName}
               </span>
             </div>
-            <div className="flex items-center gap-6 text-xs text-slate-300 pt-2">
+            <div className="flex flex-wrap items-center gap-6 text-xs text-slate-300 pt-2">
               <div>כמות שדווחה ע"י ספק: <strong className="text-white text-sm">{currentSummary.totalReportedRaw.toLocaleString()}</strong></div>
               <div>כמות מאושרת רמת"ל: <strong className="text-emerald-400 text-sm">{currentSummary.totalRamtalApproved.toLocaleString()}</strong></div>
               <div>סטטוס: <strong className="text-blue-300">
-                {currentSummary.status === 'submitted' ? '🟢 ממתין לאישור רמת"ל' :
-                 currentSummary.status === 'ramtal_approved' ? 'אושר רמת"ל' :
-                 currentSummary.status === 'draft' ? 'טיוטת ספק' : currentSummary.status}
+                {currentSummary.status === 'submitted' ? '🔵 ממתין לאישור רמת"ל' :
+                 currentSummary.status === 'ramtal_approved' ? '🟢 אושר רמת"ל' :
+                 currentSummary.status === 'food_dept_approved' ? '🟢 אושר מדור מזון' :
+                 currentSummary.status === 'returned_for_revision' ? '🔴 נדרש תיקון' :
+                 currentSummary.status === 'draft' ? '🟡 טיוטת ספק' : currentSummary.status}
               </strong></div>
             </div>
           </div>
@@ -165,29 +261,31 @@ export const RamtalView: React.FC<RamtalViewProps> = ({
             ) : (
               <div className="bg-slate-800/80 border border-slate-700 px-4 py-2 rounded-xl text-xs text-slate-300 flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                <span>הדוח בסטטוס <strong>{currentSummary.status}</strong> (מאושר או ממתין לספק)</span>
+                <span>הדוח בסטטוס <strong>{currentSummary.status}</strong></span>
               </div>
             )}
           </div>
         </div>
-      )}
+      ) : null}
 
       {/* Daily Verification Table */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
         <div className="p-4 border-b border-slate-200 bg-slate-50/70 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Edit3 className="w-4 h-4 text-slate-600" />
-            <h3 className="font-bold text-slate-800 text-sm">בדיקת שורות הדיווח היומיות (רמת"ל)</h3>
+            <h3 className="font-bold text-slate-800 text-sm">
+              בדיקת שורות הדיווח היומיות (רמת"ל) {selectedKitchenId === 0 ? '— כל המטבחים' : `— ${selectedKitchen?.name}`}
+            </h3>
           </div>
           <span className="text-xs text-slate-500">
-            לחץ על כפתור העריכה בכל שורה לתיקון כמות עם נימוק
+            {currentReports.length} שורות דיווח שהוגשו לבקרה
           </span>
         </div>
 
         {currentReports.length === 0 ? (
           <div className="text-center py-10 px-4 space-y-2 bg-slate-50/50">
             <AlertCircle className="w-8 h-8 text-amber-500 mx-auto" />
-            <div className="text-xs font-bold text-slate-700">אין דיווחים שהוגשו לאישור עבור מטבח זה</div>
+            <div className="text-xs font-bold text-slate-700">אין דיווחים שהוגשו לאישור עבור בחירה זו</div>
             <p className="text-[11px] text-slate-500 max-w-sm mx-auto">
               {currentSummary?.status === 'draft'
                 ? 'הספק עדיין עורך את הדיווח כטיוטה וטרם ביצע סיום והגשה לרמת"ל.'
@@ -200,12 +298,14 @@ export const RamtalView: React.FC<RamtalViewProps> = ({
               <thead className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
                 <tr>
                   <th className="p-3">תאריך</th>
+                  {selectedKitchenId === 0 && <th className="p-3">מטבח / תחנה</th>}
                   <th className="p-3">סוג ארוחה</th>
                   <th className="p-3 text-center">חד"א</th>
                   <th className="p-3 text-center">משיכות</th>
                   <th className="p-3 text-center">כמות מדווחת ספק</th>
                   <th className="p-3 text-center">כמות מאושרת רמת"ל</th>
                   <th className="p-3">נימוק שינוי / הערה / אסמכתא</th>
+                  <th className="p-3 text-center">סטטוס</th>
                   <th className="p-3 text-center">פעולות</th>
                 </tr>
               </thead>
@@ -216,18 +316,25 @@ export const RamtalView: React.FC<RamtalViewProps> = ({
                   const hasDiscrepancy = row.ramtalAdjustedQty !== undefined && row.ramtalAdjustedQty !== row.rawReportedQty;
 
                   return (
-                    <tr key={row.id} className={hasDiscrepancy ? 'bg-amber-50/60' : 'hover:bg-slate-50'}>
+                    <tr key={row.id} className={hasDiscrepancy ? 'bg-amber-50/60' : 'hover:bg-slate-50 transition'}>
                       <td className="p-3 font-medium text-slate-800">{row.reportDate}</td>
+                      
+                      {selectedKitchenId === 0 && (
+                        <td className="p-3 font-semibold text-slate-700">
+                          {getKitchenName(row.kitchenId)}
+                        </td>
+                      )}
+
                       <td className="p-3 text-slate-700">{row.mealTypeName}</td>
                       <td className="p-3 text-center text-slate-600">{isTr ? '-' : (row.diningHallQty || '-')}</td>
                       <td className="p-3 text-center text-slate-600">{isTr ? '-' : (row.takeawayQty || '-')}</td>
                       
-                      {/* 5. כמות מדווחת ספק */}
+                      {/* כמות מדווחת ספק */}
                       <td className="p-3 text-center font-bold text-slate-700">
                         {row.rawReportedQty} {isTr ? 'ק"מ' : ''}
                       </td>
                       
-                      {/* 5. Ramtal Adjusted Qty */}
+                      {/* Ramtal Adjusted Qty */}
                       <td className="p-3 text-center font-bold">
                         {isEditing ? (
                           <div className="flex items-center justify-center gap-1">
@@ -271,20 +378,25 @@ export const RamtalView: React.FC<RamtalViewProps> = ({
                         )}
                       </td>
 
+                      {/* 3. סטטוס */}
+                      <td className="p-3 text-center">
+                        {getStatusBadge(row)}
+                      </td>
+
                       {/* Actions */}
                       <td className="p-3 text-center">
                         {isEditing ? (
                           <div className="flex items-center justify-center gap-1">
                             <button
                               onClick={() => saveEditRow(row.id)}
-                              className="p-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded transition cursor-pointer"
+                              className="p-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition cursor-pointer"
                               title="שמור שינוי"
                             >
                               <Check className="w-3.5 h-3.5" />
                             </button>
                             <button
                               onClick={() => setEditingRowId(null)}
-                              className="p-1 bg-slate-400 hover:bg-slate-500 text-white rounded transition cursor-pointer"
+                              className="p-1.5 bg-slate-400 hover:bg-slate-500 text-white rounded-lg transition cursor-pointer"
                               title="בטל"
                             >
                               <X className="w-3.5 h-3.5" />
@@ -293,7 +405,7 @@ export const RamtalView: React.FC<RamtalViewProps> = ({
                         ) : (
                           <button
                             onClick={() => startEditRow(row)}
-                            className="p-1 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded transition cursor-pointer"
+                            className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition cursor-pointer"
                             title="ערוך כמות מנומקת"
                           >
                             <Edit3 className="w-3.5 h-3.5" />
@@ -361,4 +473,5 @@ export const RamtalView: React.FC<RamtalViewProps> = ({
     </div>
   );
 };
+
 

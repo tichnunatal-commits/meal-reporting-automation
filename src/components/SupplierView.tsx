@@ -1,11 +1,31 @@
 import React, { useState, useRef } from 'react';
 import { DailyReportRow, Kitchen, MealType, MonthlyKitchenSummary, User } from '../types';
-import { Plus, Send, Upload, FileText, CheckCircle2, AlertTriangle, Clock, Trash2, Calendar, Utensils, Edit2, Copy, Check, X, Lock, Paperclip } from 'lucide-react';
+import {
+  Plus,
+  Send,
+  Upload,
+  FileText,
+  CheckCircle2,
+  AlertTriangle,
+  Clock,
+  Trash2,
+  Calendar,
+  Utensils,
+  Edit2,
+  Copy,
+  Check,
+  X,
+  Lock,
+  Paperclip,
+  RotateCcw,
+  Shield
+} from 'lucide-react';
 import { SearchableKitchenSelect, formatKitchenDisplayName } from './SearchableKitchenSelect';
 import { filterKitchensForSupplier } from '../data/supplierKitchenMap';
 
 interface SupplierViewProps {
   currentUser: User;
+  isSuperAdmin?: boolean;
   kitchens: Kitchen[];
   mealTypes: MealType[];
   dailyReports: DailyReportRow[];
@@ -15,10 +35,13 @@ interface SupplierViewProps {
   onDuplicateDailyReport?: (rowId: number) => void;
   onDeleteDailyReport?: (rowId: number) => void;
   onSubmitMonth: (summaryId: number) => void;
+  onAdminResetDrafts?: (options: { kitchenId?: number; filterType: 'today' | 'month' | 'all' }) => void;
+  onAdminDeleteAllReports?: (options: { kitchenId?: number; filterType: 'today' | 'month' | 'all' }) => void;
 }
 
 export const SupplierView: React.FC<SupplierViewProps> = ({
   currentUser,
+  isSuperAdmin = false,
   kitchens,
   mealTypes,
   dailyReports,
@@ -28,6 +51,8 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
   onDuplicateDailyReport,
   onDeleteDailyReport,
   onSubmitMonth,
+  onAdminResetDrafts,
+  onAdminDeleteAllReports
 }) => {
   // 1. הרשאות ספקים דינמיות מקובץ האקסל
   const allowedKitchens = filterKitchensForSupplier(kitchens, currentUser.supplierId || 1);
@@ -75,12 +100,26 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
   const [deleteConfirmRowId, setDeleteConfirmRowId] = useState<number | null>(null);
   const [showSubmitConfirmModal, setShowSubmitConfirmModal] = useState<boolean>(false);
 
+  // Admin Panel states
+  const [adminFilterScope, setAdminFilterScope] = useState<'current_kitchen' | 'all_kitchens'>('current_kitchen');
+  const [adminFilterTime, setAdminFilterTime] = useState<'today' | 'month' | 'all'>('month');
+  const [showResetDraftsModal, setShowResetDraftsModal] = useState<boolean>(false);
+  const [showDeleteAllModal, setShowDeleteAllModal] = useState<boolean>(false);
+  const [masterDeleteConfirmText, setMasterDeleteConfirmText] = useState<string>('');
+
   const isTransportMeal = (typeId: number) => typeId === 9 || typeId === 10;
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       setUploadedFile(file.name);
+    }
+  };
+
+  const handleRemoveFile = () => {
+    setUploadedFile('');
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
     }
   };
 
@@ -140,7 +179,8 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
       takeawayQty: isTr ? 0 : tQty,
       rawReportedQty: totalQty,
       eventCostNis: row.isSpecialEvent ? Number(editEventCost) || 0 : undefined,
-      notes: editNotes.trim()
+      notes: editNotes.trim(),
+      status: row.status === 'returned_for_revision' ? 'draft' : row.status
     };
 
     if (onUpdateDailyReport) {
@@ -218,6 +258,7 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
     setTransportKm('');
     setNotes('');
     setUploadedFile('');
+    if (fileInputRef.current) fileInputRef.current.value = '';
     if (isSpecialEvent) {
       setIsSpecialEvent(false);
       setEventCostNis(0);
@@ -225,6 +266,45 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
   };
 
   const totalReportedMeals = currentReports.reduce((sum, r) => sum + r.rawReportedQty, 0);
+
+  // Helper for 4 exact statuses
+  const getStatusBadge = (row: DailyReportRow) => {
+    const s = row.status || (isMonthSubmitted ? 'submitted' : 'draft');
+
+    if (s === 'returned_for_revision') {
+      return (
+        <span className="inline-flex items-center gap-1 bg-rose-100 text-rose-800 border border-rose-300 font-bold px-2.5 py-0.5 rounded-full text-[10px]">
+          <AlertTriangle className="w-3 h-3 text-rose-600 shrink-0" />
+          <span>נדרש תיקון</span>
+        </span>
+      );
+    }
+
+    if (s === 'submitted' || isMonthSubmitted) {
+      return (
+        <span className="inline-flex items-center gap-1 bg-blue-100 text-blue-800 border border-blue-300 font-bold px-2.5 py-0.5 rounded-full text-[10px]">
+          <Clock className="w-3 h-3 text-blue-600 shrink-0" />
+          <span>ממתין לאישור רמת"ל</span>
+        </span>
+      );
+    }
+
+    if (s === 'ramtal_approved' || s === 'food_dept_approved') {
+      return (
+        <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold px-2.5 py-0.5 rounded-full text-[10px]">
+          <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
+          <span>מאושר</span>
+        </span>
+      );
+    }
+
+    return (
+      <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-800 border border-amber-300 font-bold px-2.5 py-0.5 rounded-full text-[10px]">
+        <FileText className="w-3 h-3 text-amber-600 shrink-0" />
+        <span>טיוטה</span>
+      </span>
+    );
+  };
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -242,6 +322,61 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
           >
             <X className="w-4 h-4" />
           </button>
+        </div>
+      )}
+
+      {/* 4. פאנל ניהול ואיפוס למנהל מערכת בלבד (Admin / zeev) */}
+      {(currentUser.role === 'system_admin' || isSuperAdmin) && (
+        <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 text-white p-4 sm:p-5 rounded-2xl border border-indigo-500/30 shadow-lg space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-700/60 pb-3">
+            <div className="flex items-center gap-2.5">
+              <Shield className="w-5 h-5 text-amber-400 shrink-0" />
+              <div>
+                <h4 className="font-bold text-xs sm:text-sm text-white flex items-center gap-2">
+                  <span>פאנל ניהול ואיפוס דיווחים</span>
+                  <span className="bg-amber-400/20 text-amber-300 border border-amber-400/30 text-[10px] px-2 py-0.5 rounded-full font-mono">ADMIN ONLY</span>
+                </h4>
+                <p className="text-[11px] text-slate-300">פעולות איפוס ומחיקה גורפות של דיווחים (זאב נאורי / מנהל מערכת)</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 text-xs">
+              <select
+                value={adminFilterScope}
+                onChange={(e) => setAdminFilterScope(e.target.value as any)}
+                className="bg-slate-800 border border-slate-600 rounded-xl px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-amber-400 font-medium"
+              >
+                <option value="current_kitchen">מטבח נוכחי בלבד ({selectedKitchen?.name})</option>
+                <option value="all_kitchens">כל המטבחים במערכת (גלובלי)</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <button
+                type="button"
+                onClick={() => setShowResetDraftsModal(true)}
+                className="flex items-center gap-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-400/40 px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer shadow-xs"
+              >
+                <RotateCcw className="w-4 h-4 text-amber-400" />
+                <span>איפוס טיוטות</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowDeleteAllModal(true)}
+                className="flex items-center gap-1.5 bg-rose-900/60 hover:bg-rose-800 text-rose-200 border border-rose-700/60 px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer shadow-xs"
+              >
+                <Trash2 className="w-4 h-4 text-rose-400" />
+                <span>מאסטר: מחיקת כל הדיווחים</span>
+              </button>
+            </div>
+
+            <div className="text-[11px] text-slate-400">
+              סה"כ דיווחים שמורים במערכת: <strong className="text-white">{dailyReports.length}</strong> שורות (מתוכם <strong className="text-amber-300">{dailyReports.filter(r => (r.status || 'draft') === 'draft').length}</strong> טיוטות)
+            </div>
+          </div>
         </div>
       )}
 
@@ -270,13 +405,13 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
       {currentSummary && (
         <div className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
           currentSummary.status === 'draft' ? 'bg-amber-50/80 border-amber-200 text-amber-900' :
-          currentSummary.status === 'submitted' ? 'bg-emerald-50/80 border-emerald-200 text-emerald-900' :
+          currentSummary.status === 'submitted' ? 'bg-blue-50/80 border-blue-200 text-blue-900' :
           currentSummary.status === 'returned_for_revision' ? 'bg-rose-50/80 border-rose-200 text-rose-900' :
           'bg-emerald-50/80 border-emerald-200 text-emerald-900'
         }`}>
           <div className="flex items-start sm:items-center gap-3">
             <div className="mt-0.5 sm:mt-0 shrink-0">
-              {currentSummary.status === 'submitted' && <Clock className="w-5 h-5 text-emerald-600" />}
+              {currentSummary.status === 'submitted' && <Clock className="w-5 h-5 text-blue-600" />}
               {currentSummary.status === 'returned_for_revision' && <AlertTriangle className="w-5 h-5 text-rose-600" />}
               {currentSummary.status === 'ramtal_approved' && <CheckCircle2 className="w-5 h-5 text-emerald-600" />}
               {currentSummary.status === 'draft' && <FileText className="w-5 h-5 text-amber-600" />}
@@ -286,10 +421,10 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
               <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">סטטוס דוח חודשי:</div>
               <div className="font-bold text-xs sm:text-sm break-words">
                 {currentSummary.status === 'draft' && 'טיוטה פתוחה להזנה (טרם הוגש לרמת"ל)'}
-                {currentSummary.status === 'submitted' && '🟢 ממתין לאישור רמת"ל (הדוח ננעל לבקרה משטרתית)'}
-                {currentSummary.status === 'returned_for_revision' && `הוחזר לעריכה ע"י הרמת"ל: "${currentSummary.revisionReason || 'נא לתקן כמויות'}"`}
-                {currentSummary.status === 'ramtal_approved' && 'אושר ע"י רמת"ל — הועבר לבקרת מדור מזון'}
-                {currentSummary.status === 'food_dept_approved' && 'אושר סופית לתשלום ע"י מדור מזון'}
+                {currentSummary.status === 'submitted' && '🔵 ממתין לאישור רמת"ל (הדוח ננעל לבקרה משטרתית)'}
+                {currentSummary.status === 'returned_for_revision' && `🔴 נדרש תיקון ע"י הרמת"ל: "${currentSummary.revisionReason || 'נא לתקן כמויות ולשלוח מחדש'}"`}
+                {currentSummary.status === 'ramtal_approved' && '🟢 אושר ע"י רמת"ל — הועבר לבקרת מדור מזון'}
+                {currentSummary.status === 'food_dept_approved' && '🟢 אושר סופית לתשלום ע"י מדור מזון'}
               </div>
             </div>
           </div>
@@ -367,7 +502,7 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
               />
             </div>
           ) : isTransportMeal(mealTypeId) ? (
-            /* 5. Transport as Kilometers (ק"מ) */
+            /* Transport as Kilometers (ק"מ) */
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
               <div className="space-y-1">
                 <label className="text-[11px] font-bold text-blue-900 flex items-center justify-between">
@@ -432,7 +567,7 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
             </div>
           )}
 
-          {/* Bottom Row: Mandatory Notes, Attachment Button & Submit */}
+          {/* Bottom Row: Mandatory Notes, Attachment Button with Removal & Submit */}
           <div className="space-y-2 pt-2 border-t border-slate-100">
             <div className="flex flex-col sm:flex-row items-center gap-2">
               <div className="w-full relative">
@@ -446,7 +581,7 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
                 />
               </div>
 
-              {/* 2. Hidden file input & connected button */}
+              {/* 1. Hidden file input & connected button with Remove button */}
               <input
                 type="file"
                 ref={fileInputRef}
@@ -455,21 +590,36 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
                 className="hidden"
               />
 
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className={`w-full sm:w-auto shrink-0 flex items-center justify-center gap-1.5 text-xs font-semibold px-3.5 py-2 rounded-xl border transition cursor-pointer min-h-[38px] ${
-                  uploadedFile
-                    ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
-                    : 'text-slate-700 bg-slate-100 hover:bg-blue-50 hover:text-blue-700 border-slate-200'
-                }`}
-              >
-                <Upload className="w-3.5 h-3.5" />
-                <span className="truncate max-w-[180px]">
-                  {uploadedFile ? `צורף: ${uploadedFile}` : 'צרף אסמכתא (PDF)'}
-                </span>
-                {uploadedFile && <Check className="w-3.5 h-3.5 text-emerald-600 ml-1" />}
-              </button>
+              <div className="flex items-center gap-1.5 w-full sm:w-auto shrink-0">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className={`w-full sm:w-auto shrink-0 flex items-center justify-center gap-1.5 text-xs font-semibold px-3.5 py-2 rounded-xl border transition cursor-pointer min-h-[38px] ${
+                    uploadedFile
+                      ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                      : 'text-slate-700 bg-slate-100 hover:bg-blue-50 hover:text-blue-700 border-slate-200'
+                  }`}
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  <span className="truncate max-w-[170px]">
+                    {uploadedFile ? `צורף: ${uploadedFile}` : 'צרף אסמכתא (PDF)'}
+                  </span>
+                  {uploadedFile && <Check className="w-3.5 h-3.5 text-emerald-600 ml-1" />}
+                </button>
+
+                {/* 1. כפתור הסרת קובץ מצורף */}
+                {uploadedFile && (
+                  <button
+                    type="button"
+                    onClick={handleRemoveFile}
+                    className="p-2 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl text-xs font-bold transition flex items-center gap-1 border border-rose-200 cursor-pointer shrink-0 min-h-[38px]"
+                    title="הסר קובץ מצורף"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">הסר קובץ</span>
+                  </button>
+                )}
+              </div>
             </div>
 
             <button
@@ -497,8 +647,8 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
           </div>
 
           {isMonthSubmitted ? (
-            <div className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-800 border border-emerald-300 px-3.5 py-2 rounded-xl text-xs font-bold shadow-2xs">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <div className="inline-flex items-center gap-1.5 bg-blue-50 text-blue-800 border border-blue-300 px-3.5 py-2 rounded-xl text-xs font-bold shadow-2xs">
+              <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0" />
               <span>הדיווחים ננעלו והוגשו בהצלחה לרמת"ל</span>
             </div>
           ) : (
@@ -524,6 +674,7 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
             currentReports.map((row, idx) => {
               const isEditing = editingRowId === row.id;
               const isTr = isTransportMeal(row.mealTypeId);
+              const rowStatus = row.status || (isMonthSubmitted ? 'submitted' : 'draft');
 
               return (
                 <div key={row.id} className={`p-3 space-y-2.5 ${isEditing ? 'bg-amber-50/70 border-r-4 border-amber-500' : ''}`}>
@@ -575,44 +726,51 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
                   {/* Actions Bar for Mobile */}
                   <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
                     <div className="text-[11px]">
-                      {isMonthSubmitted || row.status === 'submitted' ? (
-                        <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-800 border border-emerald-300 px-2 py-0.5 rounded text-[10px] font-bold">
-                          <CheckCircle2 className="w-3 h-3 text-emerald-600" /> ממתין לאישור רמת"ל
-                        </span>
-                      ) : (
-                        <span className="bg-amber-100 text-amber-800 px-2 py-0.5 rounded text-[10px] font-bold">
-                          טיוטה
-                        </span>
-                      )}
+                      {getStatusBadge(row)}
                     </div>
 
-                    {!isMonthSubmitted && (
-                      <div className="flex items-center gap-1">
+                    <div>
+                      {rowStatus === 'returned_for_revision' ? (
                         <button
                           type="button"
                           onClick={() => startEditRow(row)}
-                          className="p-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg text-xs font-bold transition flex items-center gap-1 min-h-[36px] px-2 cursor-pointer"
+                          className="p-1.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold transition flex items-center gap-1 min-h-[36px] px-2 cursor-pointer shadow-2xs"
                         >
                           <Edit2 className="w-3.5 h-3.5" />
-                          <span>עריכה</span>
+                          <span>תקן שורה</span>
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => onDuplicateDailyReport && onDuplicateDailyReport(row.id)}
-                          className="p-1.5 bg-purple-50 text-purple-700 hover:bg-purple-100 rounded-lg text-xs font-bold transition flex items-center gap-1 min-h-[36px] px-2 cursor-pointer"
-                        >
-                          <Copy className="w-3.5 h-3.5" />
-                          <span>שכפול</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setDeleteConfirmRowId(row.id)}
-                          className="p-1.5 bg-rose-50 text-rose-700 hover:bg-rose-100 rounded-lg text-xs font-bold transition flex items-center gap-1 min-h-[36px] px-2 cursor-pointer"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    )}
+                      ) : rowStatus === 'submitted' || rowStatus === 'ramtal_approved' || rowStatus === 'food_dept_approved' || isMonthSubmitted ? (
+                        <span className="inline-flex items-center gap-1 text-slate-400 font-bold text-xs">
+                          <Lock className="w-3.5 h-3.5 text-slate-400" /> ננעל לעריכה
+                        </span>
+                      ) : (
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => startEditRow(row)}
+                            className="p-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg text-xs font-bold transition flex items-center gap-1 min-h-[36px] px-2 cursor-pointer"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                            <span>עריכה</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => onDuplicateDailyReport && onDuplicateDailyReport(row.id)}
+                            className="p-1.5 bg-purple-50 text-purple-700 hover:bg-purple-100 rounded-lg text-xs font-bold transition flex items-center gap-1 min-h-[36px] px-2 cursor-pointer"
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                            <span>שכפול</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDeleteConfirmRowId(row.id)}
+                            className="p-1.5 bg-rose-50 text-rose-700 hover:bg-rose-100 rounded-lg text-xs font-bold transition flex items-center gap-1 min-h-[36px] px-2 cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               );
@@ -641,6 +799,7 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
               {currentReports.map((row, idx) => {
                 const isEditing = editingRowId === row.id;
                 const isTr = isTransportMeal(row.mealTypeId);
+                const rowStatus = row.status || (isMonthSubmitted ? 'submitted' : 'draft');
 
                 return (
                   <tr key={row.id} className={isEditing ? 'bg-amber-50/70' : 'hover:bg-slate-50 transition'}>
@@ -785,28 +944,12 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
 
                     {/* 9. סטטוס רמת"ל */}
                     <td className="p-3 text-center">
-                      {isMonthSubmitted || row.status === 'submitted' ? (
-                        <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-800 border border-emerald-300 px-2.5 py-0.5 rounded-full text-[10px] font-bold">
-                          <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" /> ממתין לאישור רמת"ל
-                        </span>
-                      ) : row.ramtalAdjustedQty !== undefined && row.ramtalAdjustedQty !== row.rawReportedQty ? (
-                        <span className="bg-rose-100 text-rose-800 px-2 py-0.5 rounded font-medium text-[11px]">
-                          תוקן ל-{row.ramtalAdjustedQty}
-                        </span>
-                      ) : (
-                        <span className="bg-amber-100 text-amber-800 px-2.5 py-0.5 rounded-full text-[10px] font-bold">
-                          טיוטה
-                        </span>
-                      )}
+                      {getStatusBadge(row)}
                     </td>
 
-                    {/* 10. פעולות (עריכה, שכפול, מחיקה, שמירה) */}
+                    {/* 10. פעולות (5. נעילה הרמטית של שורות שהוגשו, חריג לנדרש תיקון) */}
                     <td className="p-3 text-center">
-                      {isMonthSubmitted ? (
-                        <span className="text-slate-400 font-medium text-[11px] inline-flex items-center gap-1">
-                          <Lock className="w-3.5 h-3.5 text-slate-400" /> ננעל
-                        </span>
-                      ) : isEditing ? (
+                      {isEditing ? (
                         <div className="flex items-center justify-center gap-1">
                           <button
                             type="button"
@@ -826,7 +969,24 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
                             <X className="w-3.5 h-3.5" />
                           </button>
                         </div>
+                      ) : rowStatus === 'returned_for_revision' ? (
+                        /* חריג: נדרש תיקון - פתוח לעריכה בלבד עבור הספק */
+                        <button
+                          type="button"
+                          onClick={() => startEditRow(row)}
+                          className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer mx-auto shadow-2xs"
+                          title="תקן שורה והגש מחדש"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                          <span>תקן שורה</span>
+                        </button>
+                      ) : rowStatus === 'submitted' || rowStatus === 'ramtal_approved' || rowStatus === 'food_dept_approved' || isMonthSubmitted ? (
+                        /* 5. נעילה הרמטית של שורות שהוגשו */
+                        <span className="text-slate-400 font-bold text-[11px] inline-flex items-center gap-1">
+                          <Lock className="w-3.5 h-3.5 text-slate-400" /> ננעל לעריכה
+                        </span>
                       ) : (
+                        /* טיוטה רגילה - כפתורי פעולות מלאים */
                         <div className="flex items-center justify-center gap-1">
                           <button
                             type="button"
@@ -901,7 +1061,7 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
 
             <div className="space-y-3">
               <p className="text-xs text-slate-700 leading-relaxed font-medium">
-                האם לנעול ולהגיש את הדיווחים לחודש זה? לאחר ההגשה לא ניתן יהיה לבצע שינויים נוספים בשורות הדיווח.
+                האם לנעול ולהגיש את הדיווחים לחודש זה? לאחר ההגשה לא ניתן יהיה לבצע שינויים נוספים בשורות הדיווח (השורות יינעלו לבקרה משטרתית).
               </p>
 
               {/* 6. Month / Year selector */}
@@ -955,6 +1115,190 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
                 className="px-4 py-2 text-xs font-bold text-white bg-blue-700 hover:bg-blue-800 rounded-xl shadow-md transition cursor-pointer"
               >
                 אישור והגשה סופית
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Admin Modal: איפוס טיוטות */}
+      {showResetDraftsModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4" dir="rtl">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl border border-slate-200 space-y-4 animate-fade-in">
+            <div className="flex items-center gap-2.5 text-amber-700 bg-amber-50 p-3 rounded-xl border border-amber-200">
+              <RotateCcw className="w-5 h-5 shrink-0 text-amber-600" />
+              <h4 className="font-bold text-sm text-slate-900">איפוס ומחיקת שורות טיוטה</h4>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed">
+              פעולה זו תמחק <strong>אך ורק שורות בסטטוס טיוטה 🟡</strong> שטרם הוגשו לרמת"ל, בטווח שנבחר.
+            </p>
+
+            <div className="space-y-2 bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs">
+              <label className="block text-[11px] font-bold text-slate-700 mb-1">בחר טווח לאיפוס:</label>
+              <div className="space-y-1.5">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="resetTime"
+                    checked={adminFilterTime === 'month'}
+                    onChange={() => setAdminFilterTime('month')}
+                    className="text-amber-600 focus:ring-amber-500"
+                  />
+                  <span>כל הטיוטות של החודש הנוכחי</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="resetTime"
+                    checked={adminFilterTime === 'today'}
+                    onChange={() => setAdminFilterTime('today')}
+                    className="text-amber-600 focus:ring-amber-500"
+                  />
+                  <span>טיוטות של היום הנוכחי בלבד ({new Date().toISOString().split('T')[0]})</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="resetTime"
+                    checked={adminFilterTime === 'all'}
+                    onChange={() => setAdminFilterTime('all')}
+                    className="text-amber-600 focus:ring-amber-500"
+                  />
+                  <span>כל הטיוטות ללא הגבלת זמן</span>
+                </label>
+              </div>
+
+              <div className="pt-2 mt-2 border-t border-slate-200 text-[11px] text-slate-500">
+                היקף איפוס: <strong>{adminFilterScope === 'current_kitchen' ? `מטבח ${selectedKitchen?.name} בלבד` : 'כל 124 המטבחים'}</strong>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setShowResetDraftsModal(false)}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+              >
+                ביטול
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (onAdminResetDrafts) {
+                    onAdminResetDrafts({
+                      kitchenId: adminFilterScope === 'current_kitchen' ? selectedKitchenId : undefined,
+                      filterType: adminFilterTime
+                    });
+                  }
+                  setShowResetDraftsModal(false);
+                  setSuccessBannerMessage('טיוטות הדיווח אופסו ונמחקו בהצלחה!');
+                  setTimeout(() => setSuccessBannerMessage(null), 5000);
+                }}
+                className="px-4 py-2 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-xl shadow-md transition cursor-pointer"
+              >
+                בצע איפוס טיוטות
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Admin Modal: מאסטר מחיקת כל הדיווחים */}
+      {showDeleteAllModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4" dir="rtl">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl border border-rose-300 space-y-4 animate-fade-in">
+            <div className="flex items-center gap-2.5 text-rose-700 bg-rose-50 p-3 rounded-xl border border-rose-200">
+              <Trash2 className="w-5 h-5 shrink-0 text-rose-600" />
+              <h4 className="font-bold text-sm text-slate-900">מאסטר: מחיקת כל הדיווחים</h4>
+            </div>
+
+            <p className="text-xs text-rose-900 leading-relaxed font-semibold">
+              ⚠️ אזהרה קריטית: פעולה זו תמחק את כל שורות הדיווח (כולל הוגשו, אושרו או נדחו) בטווח שנבחר!
+            </p>
+
+            <div className="space-y-2 bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs">
+              <label className="block text-[11px] font-bold text-slate-700 mb-1">בחר טווח מחיקה גורף:</label>
+              <div className="space-y-1.5">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="deleteAllTime"
+                    checked={adminFilterTime === 'month'}
+                    onChange={() => setAdminFilterTime('month')}
+                    className="text-rose-600 focus:ring-rose-500"
+                  />
+                  <span>כל הדיווחים של החודש הנוכחי</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="deleteAllTime"
+                    checked={adminFilterTime === 'today'}
+                    onChange={() => setAdminFilterTime('today')}
+                    className="text-rose-600 focus:ring-rose-500"
+                  />
+                  <span>כל הדיווחים של היום הנוכחי בלבד</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="deleteAllTime"
+                    checked={adminFilterTime === 'all'}
+                    onChange={() => setAdminFilterTime('all')}
+                    className="text-rose-600 focus:ring-rose-500"
+                  />
+                  <span>כל הדיווחים בכל הזמנים</span>
+                </label>
+              </div>
+
+              <div className="pt-2 mt-2 border-t border-slate-200 text-[11px] text-slate-500">
+                היקף מחיקה: <strong>{adminFilterScope === 'current_kitchen' ? `מטבח ${selectedKitchen?.name} בלבד` : 'כל 124 המטבחים במערכת'}</strong>
+              </div>
+            </div>
+
+            <div className="space-y-1.5 pt-1">
+              <label className="block text-[11px] font-bold text-slate-700">
+                הקלד <span className="text-rose-600 font-mono bg-rose-50 px-1 py-0.5 rounded">אישור</span> לאימות הפעולה:
+              </label>
+              <input
+                type="text"
+                value={masterDeleteConfirmText}
+                onChange={(e) => setMasterDeleteConfirmText(e.target.value)}
+                placeholder="הקלד אישור..."
+                className="w-full bg-white border border-rose-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-rose-500 focus:outline-none"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDeleteAllModal(false);
+                  setMasterDeleteConfirmText('');
+                }}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+              >
+                ביטול
+              </button>
+              <button
+                type="button"
+                disabled={masterDeleteConfirmText.trim() !== 'אישור'}
+                onClick={() => {
+                  if (onAdminDeleteAllReports) {
+                    onAdminDeleteAllReports({
+                      kitchenId: adminFilterScope === 'current_kitchen' ? selectedKitchenId : undefined,
+                      filterType: adminFilterTime
+                    });
+                  }
+                  setShowDeleteAllModal(false);
+                  setMasterDeleteConfirmText('');
+                  setSuccessBannerMessage('כל הדיווחים בטווח שנבחר נמחקו בהצלחה!');
+                  setTimeout(() => setSuccessBannerMessage(null), 5000);
+                }}
+                className="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl shadow-md transition cursor-pointer"
+              >
+                מחק לצמיתות
               </button>
             </div>
           </div>

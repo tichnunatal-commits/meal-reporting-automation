@@ -50,6 +50,8 @@ export const getAllowedTabsForRole = (role: string): TabKey[] => {
 };
 
 const AUTH_STORAGE_KEY = 'police_meal_auth_session_v3';
+const REPORTS_STORAGE_KEY = 'police_daily_reports_v3';
+const SUMMARIES_STORAGE_KEY = 'police_monthly_summaries_v3';
 
 interface AuthSessionState {
   isAuthenticated: boolean;
@@ -78,9 +80,52 @@ export const App: React.FC = () => {
 
   const [kitchens, setKitchens] = useState<Kitchen[]>(mockKitchens);
   const [tariffs, setTariffs] = useState<KitchenTariff[]>(mockTariffs);
-  const [dailyReports, setDailyReports] = useState<DailyReportRow[]>(initialDailyReports);
-  const [monthlySummaries, setMonthlySummaries] = useState<MonthlyKitchenSummary[]>(initialMonthlySummaries);
+
+  // 2. שמירת נתונים קבועה בדפדפן (LocalStorage Persistence)
+  const [dailyReports, setDailyReports] = useState<DailyReportRow[]>(() => {
+    try {
+      const saved = localStorage.getItem(REPORTS_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {
+      console.error('Failed to load daily reports from localStorage:', e);
+    }
+    return initialDailyReports;
+  });
+
+  const [monthlySummaries, setMonthlySummaries] = useState<MonthlyKitchenSummary[]>(() => {
+    try {
+      const saved = localStorage.getItem(SUMMARIES_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {
+      console.error('Failed to load monthly summaries from localStorage:', e);
+    }
+    return initialMonthlySummaries;
+  });
+
   const [activeTab, setActiveTab] = useState<TabKey>('supplier');
+
+  // שמירה אוטומטית ל-localStorage בכל שינוי
+  useEffect(() => {
+    try {
+      localStorage.setItem(REPORTS_STORAGE_KEY, JSON.stringify(dailyReports));
+    } catch (e) {
+      console.error('Failed to persist daily reports to localStorage:', e);
+    }
+  }, [dailyReports]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SUMMARIES_STORAGE_KEY, JSON.stringify(monthlySummaries));
+    } catch (e) {
+      console.error('Failed to persist monthly summaries to localStorage:', e);
+    }
+  }, [monthlySummaries]);
 
   const allowedTabs = getAllowedTabsForRole(currentUser.role);
 
@@ -486,6 +531,50 @@ export const App: React.FC = () => {
     handleLogout();
   };
 
+  // 4. פעולות איפוס ומחיקה של מנהל מערכת בלבד (Admin / zeev)
+  const handleAdminResetDrafts = ({ kitchenId, filterType }: { kitchenId?: number; filterType: 'today' | 'month' | 'all' }) => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const currentMonthPrefix = todayStr.substring(0, 7);
+
+    setDailyReports(prev => prev.filter(row => {
+      const isDraft = (row.status || 'draft') === 'draft';
+      if (!isDraft) return true; // Keep submitted / approved rows
+      if (kitchenId !== undefined && row.kitchenId !== kitchenId) return true;
+      if (filterType === 'today' && row.reportDate !== todayStr) return true;
+      if (filterType === 'month' && !row.reportDate.startsWith(currentMonthPrefix)) return true;
+      return false; // Delete matching draft
+    }));
+  };
+
+  const handleAdminDeleteAllReports = ({ kitchenId, filterType }: { kitchenId?: number; filterType: 'today' | 'month' | 'all' }) => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const currentMonthPrefix = todayStr.substring(0, 7);
+
+    setDailyReports(prev => prev.filter(row => {
+      if (kitchenId !== undefined && row.kitchenId !== kitchenId) return true;
+      if (filterType === 'today' && row.reportDate !== todayStr) return true;
+      if (filterType === 'month' && !row.reportDate.startsWith(currentMonthPrefix)) return true;
+      return false; // Delete matching report
+    }));
+
+    // Reset summaries
+    setMonthlySummaries(prev => prev.map(s => {
+      if (kitchenId !== undefined && s.kitchenId !== kitchenId) return s;
+      return {
+        ...s,
+        status: 'draft',
+        totalReportedRaw: 0,
+        totalRamtalApproved: 0,
+        calculatedNetMeals: 0,
+        calculatedTotalAmountNis: 0,
+        submittedAt: undefined,
+        ramtalApprovedAt: undefined,
+        foodDeptApprovedAt: undefined,
+        revisionReason: undefined
+      };
+    }));
+  };
+
   if (!isAuthenticated) {
     return <PasswordGate onSuccess={handleLoginSuccess} />;
   }
@@ -503,7 +592,6 @@ export const App: React.FC = () => {
         isSuperAdmin={isSuperAdmin}
       />
 
-      {/* Navigation Sub-Bar (rendered ONLY for Super-Admin or when user has multiple allowed tabs) */}
       {(isSuperAdmin || allowedTabs.length > 1) && (
         <nav className="bg-white border-b border-slate-200 sticky top-16 z-40 shadow-xs">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -581,7 +669,6 @@ export const App: React.FC = () => {
                 )}
               </div>
 
-              {/* Role indicator tag */}
               <div className="hidden md:flex items-center gap-1.5 text-xs text-slate-500">
                 <span>תפקידך הפעיל:</span>
                 <strong className="text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
@@ -599,9 +686,7 @@ export const App: React.FC = () => {
         </nav>
       )}
 
-      {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 relative">
-        {/* Welcome Toast Notification Banner */}
         {welcomeBanner && (
           <div className="fixed top-20 left-4 sm:left-8 z-50 bg-gradient-to-r from-blue-700 via-indigo-700 to-purple-800 text-white px-5 py-3.5 rounded-2xl shadow-2xl border border-blue-400/40 flex items-center gap-3">
             <div className="p-2 bg-white/20 rounded-xl shrink-0">
@@ -621,9 +706,9 @@ export const App: React.FC = () => {
         )}
 
         {activeTab === 'supplier' && (
-
           <SupplierView
             currentUser={currentUser}
+            isSuperAdmin={isSuperAdmin}
             kitchens={kitchens}
             mealTypes={mockMealTypes}
             dailyReports={dailyReports}
@@ -633,8 +718,9 @@ export const App: React.FC = () => {
             onDuplicateDailyReport={handleDuplicateDailyReport}
             onDeleteDailyReport={handleDeleteDailyReport}
             onSubmitMonth={handleSubmitMonth}
+            onAdminResetDrafts={handleAdminResetDrafts}
+            onAdminDeleteAllReports={handleAdminDeleteAllReports}
           />
-
         )}
 
         {activeTab === 'ramtal' && (
