@@ -85,9 +85,9 @@ export const App: React.FC = () => {
   const [dailyReports, setDailyReports] = useState<DailyReportRow[]>(() => {
     try {
       const saved = localStorage.getItem(REPORTS_STORAGE_KEY);
-      if (saved) {
+      if (saved !== null) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) return parsed;
       }
     } catch (e) {
       console.error('Failed to load daily reports from localStorage:', e);
@@ -98,9 +98,9 @@ export const App: React.FC = () => {
   const [monthlySummaries, setMonthlySummaries] = useState<MonthlyKitchenSummary[]>(() => {
     try {
       const saved = localStorage.getItem(SUMMARIES_STORAGE_KEY);
-      if (saved) {
+      if (saved !== null) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) return parsed;
       }
     } catch (e) {
       console.error('Failed to load monthly summaries from localStorage:', e);
@@ -280,10 +280,15 @@ export const App: React.FC = () => {
   };
 
   const handleUpdateDailyReport = (updatedRow: DailyReportRow) => {
-    setDailyReports(prev => prev.map(r => r.id === updatedRow.id ? updatedRow : r));
+    // 4. כאשר ספק עורך ושומר שורה בסטטוס נדרש תיקון, עדכן אך ורק אותה לסטטוס ממתין לאישור רמת"ל
+    const finalRow: DailyReportRow = updatedRow.status === 'returned_for_revision'
+      ? { ...updatedRow, status: 'submitted' }
+      : updatedRow;
+
+    setDailyReports(prev => prev.map(r => r.id === finalRow.id ? finalRow : r));
     setMonthlySummaries(prev => prev.map(s => {
-      if (s.kitchenId === updatedRow.kitchenId) {
-        const kitchenRows = dailyReports.map(r => r.id === updatedRow.id ? updatedRow : r).filter(r => r.kitchenId === updatedRow.kitchenId);
+      if (s.kitchenId === finalRow.kitchenId) {
+        const kitchenRows = dailyReports.map(r => r.id === finalRow.id ? finalRow : r).filter(r => r.kitchenId === finalRow.kitchenId);
         const sum = kitchenRows.reduce((acc, curr) => acc + (curr.rawReportedQty || 0), 0);
         return { ...s, totalReportedRaw: sum, totalRamtalApproved: sum };
       }
@@ -647,31 +652,39 @@ export const App: React.FC = () => {
     const todayStr = new Date().toISOString().split('T')[0];
     const currentMonthPrefix = todayStr.substring(0, 7);
 
-    setDailyReports(prev => prev.filter(row => {
-      const isDraft = (row.status || 'draft') === 'draft';
-      if (!isDraft) return true; // Keep submitted / approved rows
-      if (kitchenId !== undefined && row.kitchenId !== kitchenId) return true;
-      if (filterType === 'today' && row.reportDate !== todayStr) return true;
-      if (filterType === 'month' && !row.reportDate.startsWith(currentMonthPrefix)) return true;
-      return false; // Delete matching draft
-    }));
+    setDailyReports(prev => {
+      const filtered = prev.filter(row => {
+        const isDraft = (row.status || 'draft') === 'draft';
+        if (!isDraft) return true; // Keep submitted / approved rows
+        if (kitchenId !== undefined && row.kitchenId !== kitchenId) return true;
+        if (filterType === 'today' && row.reportDate !== todayStr) return true;
+        if (filterType === 'month' && !row.reportDate.startsWith(currentMonthPrefix)) return true;
+        return false; // Delete matching draft
+      });
+      try {
+        localStorage.setItem(REPORTS_STORAGE_KEY, JSON.stringify(filtered));
+      } catch (e) {
+        console.error(e);
+      }
+      return filtered;
+    });
   };
 
   const handleAdminDeleteAllReports = ({ kitchenId, filterType }: { kitchenId?: number; filterType: 'today' | 'month' | 'all' }) => {
     const todayStr = new Date().toISOString().split('T')[0];
     const currentMonthPrefix = todayStr.substring(0, 7);
 
-    setDailyReports(prev => prev.filter(row => {
-      if (kitchenId !== undefined && row.kitchenId !== kitchenId) return true;
-      if (filterType === 'today' && row.reportDate !== todayStr) return true;
-      if (filterType === 'month' && !row.reportDate.startsWith(currentMonthPrefix)) return true;
-      return false; // Delete matching report
-    }));
+    if (kitchenId === undefined && filterType === 'all') {
+      // 1. איפוס מוחלט (Master Reset) ל-0 שורות במערכת
+      setDailyReports([]);
+      try {
+        localStorage.setItem(REPORTS_STORAGE_KEY, JSON.stringify([]));
+        localStorage.setItem(SUMMARIES_STORAGE_KEY, JSON.stringify([]));
+      } catch (e) {
+        console.error(e);
+      }
 
-    // Reset summaries
-    setMonthlySummaries(prev => prev.map(s => {
-      if (kitchenId !== undefined && s.kitchenId !== kitchenId) return s;
-      return {
+      setMonthlySummaries(prev => prev.map(s => ({
         ...s,
         status: 'draft',
         totalReportedRaw: 0,
@@ -682,8 +695,49 @@ export const App: React.FC = () => {
         ramtalApprovedAt: undefined,
         foodDeptApprovedAt: undefined,
         revisionReason: undefined
-      };
-    }));
+      })));
+      return;
+    }
+
+    setDailyReports(prev => {
+      const filtered = prev.filter(row => {
+        if (kitchenId !== undefined && row.kitchenId !== kitchenId) return true;
+        if (filterType === 'today' && row.reportDate !== todayStr) return true;
+        if (filterType === 'month' && !row.reportDate.startsWith(currentMonthPrefix)) return true;
+        return false; // Delete matching report
+      });
+      try {
+        localStorage.setItem(REPORTS_STORAGE_KEY, JSON.stringify(filtered));
+      } catch (e) {
+        console.error(e);
+      }
+      return filtered;
+    });
+
+    // Reset summaries for matching kitchens
+    setMonthlySummaries(prev => {
+      const updated = prev.map(s => {
+        if (kitchenId !== undefined && s.kitchenId !== kitchenId) return s;
+        return {
+          ...s,
+          status: 'draft' as const,
+          totalReportedRaw: 0,
+          totalRamtalApproved: 0,
+          calculatedNetMeals: 0,
+          calculatedTotalAmountNis: 0,
+          submittedAt: undefined,
+          ramtalApprovedAt: undefined,
+          foodDeptApprovedAt: undefined,
+          revisionReason: undefined
+        };
+      });
+      try {
+        localStorage.setItem(SUMMARIES_STORAGE_KEY, JSON.stringify(updated));
+      } catch (e) {
+        console.error(e);
+      }
+      return updated;
+    });
   };
 
   if (!isAuthenticated) {

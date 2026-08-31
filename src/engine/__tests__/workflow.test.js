@@ -30,7 +30,7 @@ const isRowInTargetPeriod = (reportDate, targetMonth, targetYear) => {
   return true;
 };
 
-test('Full System Workflow: Drafts -> Submit Month -> Lock -> New Drafts -> Ramtal Approval & Revision -> Admin Reset', () => {
+test('Comprehensive Workflow V3: Master Reset, Dynamic Drafts, Ramtal Strictly-Approved Calculation, Revision Cycle & Deletion', () => {
   let dailyReports = [];
   let monthlySummaries = [
     {
@@ -88,6 +88,10 @@ test('Full System Workflow: Drafts -> Submit Month -> Lock -> New Drafts -> Ramt
   assert.equal(dailyReports[0].status, 'draft');
   assert.equal(dailyReports[1].status, 'draft');
 
+  // בידוד הרמטי: מסך הרמת"ל מסנן 100% טיוטות
+  const ramtalReportsInitial = dailyReports.filter(r => (r.status || 'draft') !== 'draft');
+  assert.equal(ramtalReportsInitial.length, 0, 'Ramtal view must strictly show 0 drafts');
+
   // 2. הגשת החודש לרמת"ל (סיום דיווח חודשי)
   const targetKitchenId = 1;
   const submitMonth = 8;
@@ -105,7 +109,7 @@ test('Full System Workflow: Drafts -> Submit Month -> Lock -> New Drafts -> Ramt
   monthlySummaries = monthlySummaries.map(s => {
     if (s.kitchenId === targetKitchenId) {
       const sum = dailyReports.filter(r => r.kitchenId === targetKitchenId).reduce((a, c) => a + c.rawReportedQty, 0);
-      return { ...s, status: 'submitted', totalReportedRaw: sum, totalRamtalApproved: sum };
+      return { ...s, status: 'submitted', totalReportedRaw: sum, totalRamtalApproved: 0 };
     }
     return s;
   });
@@ -116,7 +120,13 @@ test('Full System Workflow: Drafts -> Submit Month -> Lock -> New Drafts -> Ramt
   assert.equal(monthlySummaries[0].status, 'submitted');
   assert.equal(monthlySummaries[0].totalReportedRaw, 210);
 
-  // 3. הוספת שורה 3 בטיוטה ע"י ספק לאחר ההגשה
+  // בדיקת חישוב סה"כ כמות מאושרת ברמת"ל (Issue 3): שורות שהוגשו עדיין לא מאושרות -> סה"כ מאושר הוא 0
+  const ramtalApprovedSumBefore = dailyReports
+    .filter(r => r.status === 'ramtal_approved' || r.status === 'food_dept_approved')
+    .reduce((acc, curr) => acc + (curr.ramtalAdjustedQty !== undefined ? curr.ramtalAdjustedQty : curr.rawReportedQty), 0);
+  assert.equal(ramtalApprovedSumBefore, 0, 'Total approved must be strictly 0 before any approvals');
+
+  // 3. הוספת שורה 3 בטיוטה ע"י ספק לאחר ההגשה (Issue 2)
   const row3 = {
     id: 103,
     monthlySummaryId: 1,
@@ -129,7 +139,7 @@ test('Full System Workflow: Drafts -> Submit Month -> Lock -> New Drafts -> Ramt
     rawReportedQty: 50,
     isSpecialEvent: false,
     notes: 'אסמכתא 103',
-    status: 'draft' // פתוחה לעריכה
+    status: 'draft' // פתוחה לחלוטין לעריכה
   };
   dailyReports.push(row3);
 
@@ -138,9 +148,19 @@ test('Full System Workflow: Drafts -> Submit Month -> Lock -> New Drafts -> Ramt
   assert.equal(dailyReports[0].status, 'submitted');
   assert.equal(dailyReports[1].status, 'submitted');
 
-  // 4. אישור שורה 1 ע"י רמת"ל ללא שינוי כמות וללא חובת נימוק
+  // נעילת שורה נבדקת ברמת השורה הבודדת בלבד
+  const isRow3Locked = dailyReports[2].status === 'submitted' || dailyReports[2].status === 'ramtal_approved';
+  assert.equal(isRow3Locked, false, 'Row 3 must remain unlocked');
+
+  // 4. אישור שורה 1 ע"י רמת"ל (Issue 3)
   dailyReports = dailyReports.map(r => r.id === 101 ? { ...r, status: 'ramtal_approved' } : r);
   assert.equal(dailyReports[0].status, 'ramtal_approved');
+
+  // וידוא חישוב סה"כ כמות מאושרת ברמת"ל: שורה 1 בלבד (120 מנות)
+  const ramtalApprovedSumAfterRow1 = dailyReports
+    .filter(r => r.status === 'ramtal_approved' || r.status === 'food_dept_approved')
+    .reduce((acc, curr) => acc + (curr.ramtalAdjustedQty !== undefined ? curr.ramtalAdjustedQty : curr.rawReportedQty), 0);
+  assert.equal(ramtalApprovedSumAfterRow1, 120, 'Total approved must equal strictly approved row 1 (120)');
 
   // 5. החזרת שורה 2 לתיקון ע"י רמת"ל עם נימוק חובה
   const revisionReason = 'אי התאמה לספירת שומר בשער';
@@ -149,11 +169,46 @@ test('Full System Workflow: Drafts -> Submit Month -> Lock -> New Drafts -> Ramt
   assert.equal(dailyReports[1].status, 'returned_for_revision');
   assert.equal(dailyReports[1].ramtalAdjustmentReason, revisionReason);
 
-  // בדיקת סטטוס באנר עליון (Single Source of Truth)
-  const hasReturned = dailyReports.some(r => r.status === 'returned_for_revision');
-  assert.equal(hasReturned, true); // באנר אדום יוצג
+  // 6. עדכון נקודתי לשורה בתיקון ע"י ספק (Issue 4)
+  const updatedRow2 = {
+    ...dailyReports[1],
+    diningHallQty: 75,
+    rawReportedQty: 85,
+    notes: 'תוקן לפי ספירת שער עדכנית'
+  };
+  // בעת שמירה, מעבר מ-returned_for_revision ל-submitted מתבצע אך ורק עבור אותה שורה
+  dailyReports = dailyReports.map(r => {
+    if (r.id === updatedRow2.id) {
+      return { ...updatedRow2, status: 'submitted' };
+    }
+    return r;
+  });
+  assert.equal(dailyReports[1].status, 'submitted');
+  assert.equal(dailyReports[1].rawReportedQty, 85);
+  // שורה 3 נשארת draft ושורה 1 נשארת ramtal_approved
+  assert.equal(dailyReports[0].status, 'ramtal_approved');
+  assert.equal(dailyReports[2].status, 'draft');
 
-  // 6. איפוס אדמין מלא (מחיקת כל הדיווחים)
+  // 7. הוספה ומחיקה של שורה שהוחזרה לתיקון (Issue 5)
+  const row4 = {
+    id: 104,
+    monthlySummaryId: 1,
+    kitchenId: 1,
+    reportDate: '2026-08-04',
+    mealTypeId: 1,
+    mealTypeName: 'בוקר',
+    rawReportedQty: 40,
+    status: 'returned_for_revision'
+  };
+  dailyReports.push(row4);
+  assert.equal(dailyReports.length, 4);
+
+  // מחיקת שורה בסטטוס נדרש תיקון
+  dailyReports = dailyReports.filter(r => r.id !== 104);
+  assert.equal(dailyReports.length, 3);
+  assert.equal(dailyReports.some(r => r.id === 104), false);
+
+  // 8. איפוס מאסטר מוחלט (Issue 1)
   dailyReports = [];
   monthlySummaries = monthlySummaries.map(s => ({
     ...s,
@@ -164,10 +219,11 @@ test('Full System Workflow: Drafts -> Submit Month -> Lock -> New Drafts -> Ramt
     calculatedTotalAmountNis: 0,
     submittedAt: undefined,
     ramtalApprovedAt: undefined,
+    foodDeptApprovedAt: undefined,
     revisionReason: undefined
   }));
 
-  // וידוא ניקוי מלא ב-100%
+  // וידוא ניקוי מלא ב-100% ל-0 שורות בכל המערכת
   assert.equal(dailyReports.length, 0);
   assert.equal(monthlySummaries[0].status, 'draft');
   assert.equal(monthlySummaries[0].totalReportedRaw, 0);

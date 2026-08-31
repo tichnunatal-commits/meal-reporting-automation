@@ -486,11 +486,10 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
         </div>
       </div>
 
-      {/* Workflow Status Card - Single Source of Truth derived from rows */}
+      {/* Workflow Status Card - 6. סרגל חיווי מידעי בלבד */}
       {(() => {
         const hasReturnedRows = currentReports.some(r => r.status === 'returned_for_revision');
         const hasSubmittedRows = currentReports.some(r => r.status === 'submitted');
-        const hasDraftRows = currentReports.some(r => (r.status || 'draft') === 'draft');
         const allApproved = currentReports.length > 0 && currentReports.every(r => r.status === 'ramtal_approved' || r.status === 'food_dept_approved');
 
         let cardBg = 'bg-amber-50/80 border-amber-200 text-amber-900';
@@ -513,31 +512,17 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
         }
 
         return (
-          <div className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${cardBg}`}>
-            <div className="flex items-start sm:items-center gap-3">
-              <div className="mt-0.5 sm:mt-0 shrink-0">
-                {statusIcon}
-              </div>
-              
-              <div className="min-w-0">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">סטטוס דוח חודשי:</div>
-                <div className="font-bold text-xs sm:text-sm break-words">
-                  {statusTitle}
-                </div>
+          <div className={`p-4 rounded-2xl border flex items-center gap-3 ${cardBg}`}>
+            <div className="shrink-0">
+              {statusIcon}
+            </div>
+            
+            <div className="min-w-0">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">סטטוס דוח חודשי:</div>
+              <div className="font-bold text-xs sm:text-sm break-words">
+                {statusTitle}
               </div>
             </div>
-
-            {(hasDraftRows || hasReturnedRows || currentReports.length === 0) && (
-              <button
-                type="button"
-                onClick={() => setShowSubmitConfirmModal(true)}
-                disabled={currentReports.length === 0}
-                className="w-full sm:w-auto flex items-center justify-center gap-2 bg-gradient-to-r from-blue-700 to-indigo-700 hover:from-blue-600 hover:to-indigo-600 text-white font-bold text-xs sm:text-sm px-4 py-2.5 rounded-xl shadow-md transition shrink-0 cursor-pointer min-h-[44px] disabled:opacity-50"
-              >
-                <Send className="w-4 h-4" />
-                <span>סיום דיווח חודשי והגשה לרמת״ל</span>
-              </button>
-            )}
           </div>
         );
       })()}
@@ -747,22 +732,53 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
             </p>
           </div>
 
-          {isMonthSubmitted ? (
-            <div className="inline-flex items-center gap-1.5 bg-blue-50 text-blue-800 border border-blue-300 px-3.5 py-2 rounded-xl text-xs font-bold shadow-2xs">
-              <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0" />
-              <span>הדיווחים ננעלו והוגשו בהצלחה לרמת"ל</span>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setShowSubmitConfirmModal(true)}
-              disabled={currentReports.length === 0}
-              className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-blue-700 to-indigo-700 hover:from-blue-600 hover:to-indigo-600 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition shadow-md cursor-pointer disabled:opacity-50 min-h-[44px]"
-            >
-              <Send className="w-4 h-4" />
-              <span>סיום דיווח חודשי והגשה לרמת״ל</span>
-            </button>
-          )}
+          {/* 6. כפתור סיום דיווח חודשי בראש הטבלה */}
+          {(() => {
+            const hasUnsubmitted = currentReports.some(r => (r.status || 'draft') === 'draft' || r.status === 'returned_for_revision');
+            const allApproved = currentReports.length > 0 && currentReports.every(r => r.status === 'ramtal_approved' || r.status === 'food_dept_approved');
+
+            if (currentReports.length === 0) {
+              return (
+                <button
+                  type="button"
+                  disabled
+                  className="inline-flex items-center justify-center gap-2 bg-slate-200 text-slate-400 font-bold text-xs px-4 py-2.5 rounded-xl cursor-not-allowed min-h-[44px]"
+                >
+                  <Send className="w-4 h-4" />
+                  <span>סיום דיווח חודשי והגשה לרמת״ל</span>
+                </button>
+              );
+            }
+
+            if (allApproved) {
+              return (
+                <div className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-800 border border-emerald-300 px-3.5 py-2 rounded-xl text-xs font-bold shadow-2xs">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>הדוח החודשי אושר במלואו ע"י רמת"ל</span>
+                </div>
+              );
+            }
+
+            if (!hasUnsubmitted) {
+              return (
+                <div className="inline-flex items-center gap-1.5 bg-blue-50 text-blue-800 border border-blue-300 px-3.5 py-2 rounded-xl text-xs font-bold shadow-2xs">
+                  <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0" />
+                  <span>כל השורות הוגשו וננעלו לבקרת רמת"ל</span>
+                </div>
+              );
+            }
+
+            return (
+              <button
+                type="button"
+                onClick={() => setShowSubmitConfirmModal(true)}
+                className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-blue-700 to-indigo-700 hover:from-blue-600 hover:to-indigo-600 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition shadow-md cursor-pointer min-h-[44px]"
+              >
+                <Send className="w-4 h-4" />
+                <span>סיום דיווח חודשי והגשה לרמת״ל</span>
+              </button>
+            );
+          })()}
         </div>
 
         {/* Mobile View: Touch Cards */}
@@ -775,7 +791,7 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
             currentReports.map((row, idx) => {
               const isEditing = editingRowId === row.id;
               const isTr = isTransportMeal(row.mealTypeId);
-              const rowStatus = row.status || (isMonthSubmitted ? 'submitted' : 'draft');
+              const rowStatus = row.status || 'draft';
 
               return (
                 <div key={row.id} className={`p-3 space-y-2.5 ${isEditing ? 'bg-amber-50/70 border-r-4 border-amber-500' : ''}`}>
@@ -790,37 +806,32 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-2 text-center text-xs bg-slate-50 p-2 rounded-xl border border-slate-200/60">
+                  {/* Quantities & Totals */}
+                  <div className="grid grid-cols-3 gap-2 text-center text-xs bg-slate-50 p-2 rounded-xl">
                     <div>
-                      <div className="text-[10px] text-slate-400">חד"א</div>
-                      <strong className="text-slate-700">{isTr ? '-' : (row.diningHallQty || '-')}</strong>
+                      <span className="text-[10px] text-slate-500 block">חד"א פנימי</span>
+                      <span className="font-bold text-slate-700">{isTr ? '-' : (row.diningHallQty || '-')}</span>
                     </div>
                     <div>
-                      <div className="text-[10px] text-slate-400">משיכות</div>
-                      <strong className="text-slate-700">{isTr ? '-' : (row.takeawayQty || '-')}</strong>
+                      <span className="text-[10px] text-slate-500 block">משיכות</span>
+                      <span className="font-bold text-slate-700">{isTr ? '-' : (row.takeawayQty || '-')}</span>
                     </div>
-                    <div>
-                      <div className="text-[10px] text-blue-600 font-bold">סה"כ כמות</div>
-                      <strong className="text-blue-700 font-extrabold">
-                        {row.rawReportedQty} {isTr ? 'ק"מ' : 'מנות'}
-                      </strong>
+                    <div className="bg-blue-100/50 rounded-lg py-0.5">
+                      <span className="text-[10px] text-blue-800 block font-semibold">סה"כ {isTr ? 'ק"מ' : 'מנות'}</span>
+                      <span className="font-extrabold text-blue-700">{row.rawReportedQty}</span>
                     </div>
                   </div>
 
-                  {/* Notes & Attachment in Card */}
-                  <div className="text-[11px] text-slate-600 bg-slate-50/50 p-2 rounded-lg border border-slate-100">
-                    <div><strong>הערה/אסמכתא:</strong> {row.notes || '-'}</div>
-                    {row.attachmentFileName && (
-                      <div className="text-blue-600 font-medium flex items-center gap-1 mt-0.5">
-                        <Paperclip className="w-3 h-3" />
-                        <span>{row.attachmentFileName}</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {row.isSpecialEvent && (
-                    <div className="text-xs bg-amber-50 text-amber-900 p-2 rounded-xl border border-amber-200">
-                      אירוע מיוחד / חשבונית: <strong>₪{row.eventCostNis?.toLocaleString()}</strong>
+                  {/* Notes / Attachment */}
+                  {(row.notes || row.attachmentFileName) && (
+                    <div className="text-[11px] text-slate-600 space-y-1">
+                      {row.notes && <div><strong>אסמכתא:</strong> {row.notes}</div>}
+                      {row.attachmentFileName && (
+                        <div className="text-blue-600 flex items-center gap-1">
+                          <Paperclip className="w-3 h-3" />
+                          <span>{row.attachmentFileName}</span>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -832,15 +843,25 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
 
                     <div>
                       {rowStatus === 'returned_for_revision' ? (
-                        <button
-                          type="button"
-                          onClick={() => startEditRow(row)}
-                          className="p-1.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold transition flex items-center gap-1 min-h-[36px] px-2 cursor-pointer shadow-2xs"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                          <span>תקן שורה</span>
-                        </button>
-                      ) : rowStatus === 'submitted' || rowStatus === 'ramtal_approved' || rowStatus === 'food_dept_approved' || isMonthSubmitted ? (
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => startEditRow(row)}
+                            className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 rounded-lg text-xs font-bold transition flex items-center gap-1 min-h-[36px] px-2.5 cursor-pointer shadow-2xs"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                            <span>תקן שורה</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDeleteConfirmRowId(row.id)}
+                            className="p-1.5 bg-rose-100 hover:bg-rose-200 text-rose-800 border border-rose-300 rounded-lg text-xs font-bold transition flex items-center gap-1 min-h-[36px] px-2 cursor-pointer shadow-2xs"
+                            title="מחק שורה שהוחזרה"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ) : rowStatus === 'submitted' || rowStatus === 'ramtal_approved' || rowStatus === 'food_dept_approved' ? (
                         <span className="inline-flex items-center gap-1.5 bg-slate-100 text-slate-700 border border-slate-300 font-bold px-2.5 py-1 rounded-lg text-xs shadow-2xs">
                           <Lock className="w-3.5 h-3.5 text-slate-500 shrink-0" />
                           <span>🔒 ננעל לעריכה (הוגש לרמת"ל)</span>
@@ -901,7 +922,7 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
               {currentReports.map((row, idx) => {
                 const isEditing = editingRowId === row.id;
                 const isTr = isTransportMeal(row.mealTypeId);
-                const rowStatus = row.status || (isMonthSubmitted ? 'submitted' : 'draft');
+                const rowStatus = row.status || 'draft';
 
                 return (
                   <tr key={row.id} className={isEditing ? 'bg-amber-50/70' : 'hover:bg-slate-50 transition'}>
@@ -1072,18 +1093,28 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
                           </button>
                         </div>
                       ) : rowStatus === 'returned_for_revision' ? (
-                        /* חריג: נדרש תיקון - פתוח לעריכה בלבד עבור הספק */
-                        <button
-                          type="button"
-                          onClick={() => startEditRow(row)}
-                          className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer mx-auto shadow-2xs"
-                          title="תקן שורה והגש מחדש"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                          <span>תקן שורה</span>
-                        </button>
-                      ) : rowStatus === 'submitted' || rowStatus === 'ramtal_approved' || rowStatus === 'food_dept_approved' || isMonthSubmitted ? (
-                        /* 5. נעילה הרמטית של שורות שהוגשו */
+                        /* 5. חריג: נדרש תיקון - פתוח לעריכה או מחיקה עבור הספק */
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => startEditRow(row)}
+                            className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer shadow-2xs"
+                            title="תקן שורה והגש מחדש"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                            <span>תקן שורה</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDeleteConfirmRowId(row.id)}
+                            className="p-1.5 bg-rose-100 hover:bg-rose-200 text-rose-800 border border-rose-300 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer shadow-2xs"
+                            title="מחק שורה שהוחזרה"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ) : rowStatus === 'submitted' || rowStatus === 'ramtal_approved' || rowStatus === 'food_dept_approved' ? (
+                        /* 2. נעילה הרמטית ברמת השורה הבודדת בלבד */
                         <span className="inline-flex items-center gap-1.5 bg-slate-100 text-slate-700 border border-slate-300 font-bold px-2.5 py-1 rounded-lg text-[11px] shadow-2xs">
                           <Lock className="w-3.5 h-3.5 text-slate-500 shrink-0" />
                           <span>🔒 ננעל לעריכה (הוגש לרמת"ל)</span>

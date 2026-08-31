@@ -75,21 +75,28 @@ export const RamtalView: React.FC<RamtalViewProps> = ({
   const currentSummary = monthlySummaries.find(s => s.kitchenId === selectedKitchenId);
   const selectedKitchen = kitchens.find(k => k.id === selectedKitchenId);
 
-  // 6. סינון דיווחים מדויק (כולל קריאה מלאה ישירות מ-dailyReports ו-localStorage)
-  const isSummarySubmitted = currentSummary?.status === 'submitted' || currentSummary?.status === 'ramtal_approved' || currentSummary?.status === 'food_dept_approved' || currentSummary?.status === 'returned_for_revision';
-
+  // 4. בידוד הרמטי: מסך הרמת"ל יסנן לחלוטין שורות בסטטוס טיוטה
   const currentReports = dailyReports.filter(r => {
-    const isSubmittedRow = r.status === 'submitted' || r.status === 'ramtal_approved' || r.status === 'food_dept_approved' || r.status === 'returned_for_revision';
-    const isKitchenSummarySubmitted = monthlySummaries.some(s => s.kitchenId === r.kitchenId && s.status !== 'draft');
+    const isDraft = (r.status || 'draft') === 'draft';
+    if (isDraft) return false; // אף טיוטה לא תופיע אצל הרמת"ל בשום תרחיש
 
     if (selectedKitchenId === 0) {
-      return isSubmittedRow || isKitchenSummarySubmitted;
+      return true;
     }
-    return r.kitchenId === selectedKitchenId && (isSubmittedRow || isSummarySubmitted || (r.status !== 'draft'));
+    return r.kitchenId === selectedKitchenId;
   });
 
+  // 3. תיקון חישוב סה"כ כמות מאושרת: סכימה אך ורק של שורות שסטטוסן מאושר
+  const approvedRowsInKitchen = currentReports.filter(r => r.status === 'ramtal_approved' || r.status === 'food_dept_approved');
+  const kitchenApprovedSum = approvedRowsInKitchen.reduce((s, r) => s + (r.ramtalAdjustedQty !== undefined ? r.ramtalAdjustedQty : (r.rawReportedQty || 0)), 0);
+
   // Effective summary to always display summary card even for dynamic kitchens
-  const effectiveSummary: MonthlyKitchenSummary | null = currentSummary || (selectedKitchenId > 0 && currentReports.length > 0 ? {
+  const effectiveSummary: MonthlyKitchenSummary | null = currentSummary ? {
+    ...currentSummary,
+    totalRamtalApproved: (currentSummary.status === 'ramtal_approved' || currentSummary.status === 'food_dept_approved')
+      ? (kitchenApprovedSum > 0 ? kitchenApprovedSum : currentSummary.totalRamtalApproved)
+      : kitchenApprovedSum
+  } : (selectedKitchenId > 0 && currentReports.length > 0 ? {
     id: selectedKitchenId,
     kitchenId: selectedKitchenId,
     kitchenName: selectedKitchen ? selectedKitchen.name : `מטבח #${selectedKitchenId}`,
@@ -100,15 +107,17 @@ export const RamtalView: React.FC<RamtalViewProps> = ({
     ramtalUserId: currentUser.id,
     ramtalUserName: currentUser.fullName,
     totalReportedRaw: currentReports.reduce((s, r) => s + (r.rawReportedQty || 0), 0),
-    totalRamtalApproved: currentReports.reduce((s, r) => s + (r.ramtalAdjustedQty !== undefined ? r.ramtalAdjustedQty : r.rawReportedQty || 0), 0),
+    totalRamtalApproved: kitchenApprovedSum,
     calculatedNetMeals: 0,
     calculatedTotalAmountNis: 0,
     calculationAudit: [],
     status: currentReports.some(r => r.status === 'submitted') ? 'submitted' : (currentReports[0]?.status || 'submitted')
   } : null);
 
-  // באנר עדכונים חדשים עם נקודה זוהרת
-  const newlySubmittedSummaries = monthlySummaries.filter(s => s.status === 'submitted');
+  // באנר עדכונים חדשים: רק מטבחים עם שורות שממתינות לאישור בפועל
+  const newlySubmittedSummaries = monthlySummaries.filter(s =>
+    dailyReports.some(r => r.kitchenId === s.kitchenId && r.status === 'submitted')
+  );
 
   const isTransportMeal = (typeId: number, typeName?: string) => 
     typeId === 9 || typeId === 10 || (typeName || '').includes('שינוע');
@@ -173,7 +182,9 @@ export const RamtalView: React.FC<RamtalViewProps> = ({
   };
 
   const totalReportedAll = currentReports.reduce((acc, curr) => acc + (curr.rawReportedQty || 0), 0);
-  const totalApprovedAll = currentReports.reduce((acc, curr) => acc + (curr.ramtalAdjustedQty !== undefined ? curr.ramtalAdjustedQty : curr.rawReportedQty), 0);
+  const totalApprovedAll = currentReports
+    .filter(r => r.status === 'ramtal_approved' || r.status === 'food_dept_approved')
+    .reduce((acc, curr) => acc + (curr.ramtalAdjustedQty !== undefined ? curr.ramtalAdjustedQty : (curr.rawReportedQty || 0)), 0);
 
   return (
     <div className="space-y-6">
