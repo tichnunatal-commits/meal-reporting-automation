@@ -328,38 +328,101 @@ export const App: React.FC = () => {
     }));
   };
 
-  const handleSubmitMonth = async (summaryId: number) => {
+  // 1. תיקון זיהוי תאריכים ושינוי סטטוס בהגשה לרמת"ל (Date Parsing הרמטי)
+  const isRowInTargetPeriod = (reportDate: string, targetMonth: number, targetYear: number): boolean => {
+    if (!reportDate) return true;
+    const str = String(reportDate).trim();
+
+    // 1. בדיקת פורמט YYYY-MM-DD או YYYY/MM/DD
+    const isoMatch = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+    if (isoMatch) {
+      const y = parseInt(isoMatch[1], 10);
+      const m = parseInt(isoMatch[2], 10);
+      return y === targetYear && m === targetMonth;
+    }
+
+    // 2. בדיקת פורמט ישראלי DD/MM/YYYY או DD-MM-YYYY
+    const hebrewMatch = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+    if (hebrewMatch) {
+      const m = parseInt(hebrewMatch[2], 10);
+      const y = parseInt(hebrewMatch[3], 10);
+      return y === targetYear && m === targetMonth;
+    }
+
+    // 3. Fallback: Parse via Date
+    const d = new Date(str);
+    if (!isNaN(d.getTime())) {
+      return d.getFullYear() === targetYear && (d.getMonth() + 1) === targetMonth;
+    }
+
+    return true;
+  };
+
+  const handleSubmitMonth = async ({ kitchenId, month, year, summaryId }: { kitchenId: number; month: number; year: number; summaryId?: number }) => {
     try {
       await fetch(`${API_BASE}/reports/submit-month`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ summaryId })
+        body: JSON.stringify({ kitchenId, month, year, summaryId })
       });
     } catch (e) {
       console.error(e);
     }
 
-    const targetSummary = monthlySummaries.find(s => s.id === summaryId);
+    const nowIso = new Date().toISOString().replace('T', ' ').substring(0, 16);
 
-    setMonthlySummaries(prev => prev.map(s => {
-      if (s.id === summaryId) {
-        return {
-          ...s,
-          status: 'submitted',
-          submittedAt: new Date().toISOString().replace('T', ' ').substring(0, 16)
-        };
-      }
-      return s;
-    }));
-
-    if (targetSummary) {
-      setDailyReports(prev => prev.map(r => {
-        if (r.kitchenId === targetSummary.kitchenId) {
+    // 1. עדכון מידי של כל השורות השייכות למטבח ולחודש הנבחר לסטטוס: ממתין לאישור רמת"ל (כחול 🔵)
+    setDailyReports(prev => prev.map(r => {
+      if (r.kitchenId === kitchenId) {
+        if (isRowInTargetPeriod(r.reportDate, month, year) || (r.status || 'draft') === 'draft') {
           return { ...r, status: 'submitted' };
         }
-        return r;
-      }));
-    }
+      }
+      return r;
+    }));
+
+    // 2. עדכון / יצירת סיכום חודשי עבור המטבח
+    setMonthlySummaries(prev => {
+      const existingIdx = prev.findIndex(s => s.kitchenId === kitchenId || (summaryId && s.id === summaryId));
+      const kitchenReports = dailyReports.filter(r => r.kitchenId === kitchenId);
+      const totalRaw = kitchenReports.reduce((acc, curr) => acc + (curr.rawReportedQty || 0), 0);
+
+      if (existingIdx >= 0) {
+        const updated = [...prev];
+        const s = updated[existingIdx];
+        updated[existingIdx] = {
+          ...s,
+          status: 'submitted',
+          submittedAt: nowIso,
+          periodYear: year,
+          periodMonth: month,
+          totalReportedRaw: totalRaw > 0 ? totalRaw : s.totalReportedRaw,
+          totalRamtalApproved: totalRaw > 0 ? totalRaw : s.totalRamtalApproved
+        };
+        return updated;
+      } else {
+        const k = kitchens.find(k => k.id === kitchenId);
+        const newSummary: MonthlyKitchenSummary = {
+          id: summaryId || Date.now(),
+          kitchenId,
+          kitchenName: k?.name || `מטבח #${kitchenId}`,
+          supplierId: k?.supplierId || currentUser.supplierId || 1,
+          supplierName: currentUser.fullName,
+          periodYear: year,
+          periodMonth: month,
+          ramtalUserId: k?.defaultRamtalUserId || 2,
+          ramtalUserName: 'רפ"ק אבי כהן (רמת"ל)',
+          totalReportedRaw: totalRaw,
+          totalRamtalApproved: totalRaw,
+          calculatedNetMeals: totalRaw,
+          calculatedTotalAmountNis: 0,
+          calculationAudit: [],
+          status: 'submitted',
+          submittedAt: nowIso
+        };
+        return [newSummary, ...prev];
+      }
+    });
   };
 
   const handleApproveSummary = async (summaryId: number) => {

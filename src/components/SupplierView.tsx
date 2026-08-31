@@ -34,7 +34,7 @@ interface SupplierViewProps {
   onUpdateDailyReport?: (updatedRow: DailyReportRow) => void;
   onDuplicateDailyReport?: (rowId: number) => void;
   onDeleteDailyReport?: (rowId: number) => void;
-  onSubmitMonth: (summaryId: number) => void;
+  onSubmitMonth: (options: { kitchenId: number; month: number; year: number; summaryId?: number }) => void;
   onAdminResetDrafts?: (options: { kitchenId?: number; filterType: 'today' | 'month' | 'all' }) => void;
   onAdminDeleteAllReports?: (options: { kitchenId?: number; filterType: 'today' | 'month' | 'all' }) => void;
 }
@@ -54,14 +54,28 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
   onAdminResetDrafts,
   onAdminDeleteAllReports
 }) => {
-  // 1. הרשאות ספקים דינמיות מקובץ האקסל
-  const allowedKitchens = filterKitchensForSupplier(kitchens, currentUser.supplierId || 1);
+  const isUserAdmin = isSuperAdmin || currentUser.role === 'system_admin';
+  const [adminSupplierFilter, setAdminSupplierFilter] = useState<number | 'all'>('all');
+
+  // 4. הרחבת הרשאות מטבחים למנהל מערכת (Admin / zeev): כל 124 המטבחים במערכת
+  const allowedKitchens = isUserAdmin
+    ? (adminSupplierFilter === 'all' ? kitchens : kitchens.filter(k => k.supplierId === adminSupplierFilter))
+    : filterKitchensForSupplier(kitchens, currentUser.supplierId || 1);
+
   const myKitchens = [...allowedKitchens].sort((a, b) => {
     const clusterComp = (a.cluster || a.region || '').localeCompare(b.cluster || b.region || '', 'he');
     if (clusterComp !== 0) return clusterComp;
     return a.name.localeCompare(b.name, 'he');
   });
+
   const [selectedKitchenId, setSelectedKitchenId] = useState<number>(myKitchens[0]?.id || 1);
+
+  // Sync selectedKitchenId when supplier filter changes
+  React.useEffect(() => {
+    if (myKitchens.length > 0 && !myKitchens.some(k => k.id === selectedKitchenId)) {
+      setSelectedKitchenId(myKitchens[0].id);
+    }
+  }, [adminSupplierFilter, myKitchens]);
 
   const selectedKitchen = kitchens.find(k => k.id === selectedKitchenId);
   const currentSummary = monthlySummaries.find(s => s.kitchenId === selectedKitchenId);
@@ -381,23 +395,94 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
       )}
 
       {/* Top Banner: Kitchen selection & status */}
-      <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs space-y-3 sm:space-y-0 sm:flex sm:items-center sm:justify-between">
-        <div>
-          <span className="text-[11px] font-semibold text-blue-600 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-100">
-            נציג ספק הסעדה
-          </span>
-          <h2 className="text-lg sm:text-xl font-bold text-slate-800 mt-1">יומן דיווח כמויות ארוחות</h2>
-          <p className="text-xs text-slate-500">הזנת נתונים יומיים מחוץ לשעון וצירוף אסמכתאות</p>
-        </div>
+      <div className="space-y-3">
+        {/* 4. הרחבת הרשאות מטבחים למנהל מערכת (Admin / zeev) */}
+        {isUserAdmin && (
+          <div className="bg-gradient-to-r from-indigo-900 to-slate-900 text-white border border-indigo-500/30 rounded-2xl p-3.5 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 text-xs shadow-md">
+            <div className="flex items-center gap-2">
+              <span className="bg-amber-400 text-slate-950 font-extrabold px-2 py-0.5 rounded-full text-[10px] font-mono">ADMIN ACCESS</span>
+              <span className="font-bold text-white text-xs">גישת מנהל לכל 124 המטבחים — סנן לפי ספק מורשה:</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setAdminSupplierFilter('all')}
+                className={`px-3 py-1 rounded-xl font-bold text-xs transition cursor-pointer ${
+                  adminSupplierFilter === 'all'
+                    ? 'bg-amber-400 text-slate-950 shadow-xs'
+                    : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700'
+                }`}
+              >
+                🏛️ כל 124 המטבחים
+              </button>
+              <button
+                type="button"
+                onClick={() => setAdminSupplierFilter(1)}
+                className={`px-3 py-1 rounded-xl font-bold text-xs transition cursor-pointer ${
+                  adminSupplierFilter === 1
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700'
+                }`}
+              >
+                קייטרינג גורמה
+              </button>
+              <button
+                type="button"
+                onClick={() => setAdminSupplierFilter(2)}
+                className={`px-3 py-1 rounded-xl font-bold text-xs transition cursor-pointer ${
+                  adminSupplierFilter === 2
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700'
+                }`}
+              >
+                מבושלת בע"מ
+              </button>
+              <button
+                type="button"
+                onClick={() => setAdminSupplierFilter(3)}
+                className={`px-3 py-1 rounded-xl font-bold text-xs transition cursor-pointer ${
+                  adminSupplierFilter === 3
+                    ? 'bg-purple-600 text-white shadow-xs'
+                    : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700'
+                }`}
+              >
+                קייטרינג ליבר
+              </button>
+              <button
+                type="button"
+                onClick={() => setAdminSupplierFilter(4)}
+                className={`px-3 py-1 rounded-xl font-bold text-xs transition cursor-pointer ${
+                  adminSupplierFilter === 4
+                    ? 'bg-amber-600 text-white shadow-xs'
+                    : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700'
+                }`}
+              >
+                סודקסו
+              </button>
+            </div>
+          </div>
+        )}
 
-        <div className="w-full sm:w-80">
-          <label className="block text-[11px] font-medium text-slate-600 mb-1 sm:hidden">בחר מטבח מדווח:</label>
-          <SearchableKitchenSelect
-            kitchens={myKitchens}
-            selectedKitchenId={selectedKitchenId}
-            onChange={setSelectedKitchenId}
-            themeColor="blue"
-          />
+        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs space-y-3 sm:space-y-0 sm:flex sm:items-center sm:justify-between">
+          <div>
+            <span className="text-[11px] font-semibold text-blue-600 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-100">
+              {isUserAdmin ? 'מנהל מערכת (זאב נאורי)' : 'נציג ספק הסעדה'}
+            </span>
+            <h2 className="text-lg sm:text-xl font-bold text-slate-800 mt-1">יומן דיווח כמויות ארוחות</h2>
+            <p className="text-xs text-slate-500">
+              {isUserAdmin ? `צפייה והזנה עבור ${myKitchens.length} מטבחים מורשים` : 'הזנת נתונים יומיים מחוץ לשעון וצירוף אסמכתאות'}
+            </p>
+          </div>
+
+          <div className="w-full sm:w-80">
+            <label className="block text-[11px] font-medium text-slate-600 mb-1 sm:hidden">בחר מטבח מדווח:</label>
+            <SearchableKitchenSelect
+              kitchens={myKitchens}
+              selectedKitchenId={selectedKitchenId}
+              onChange={setSelectedKitchenId}
+              themeColor="blue"
+            />
+          </div>
         </div>
       </div>
 
@@ -740,8 +825,9 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
                           <span>תקן שורה</span>
                         </button>
                       ) : rowStatus === 'submitted' || rowStatus === 'ramtal_approved' || rowStatus === 'food_dept_approved' || isMonthSubmitted ? (
-                        <span className="inline-flex items-center gap-1 text-slate-400 font-bold text-xs">
-                          <Lock className="w-3.5 h-3.5 text-slate-400" /> ננעל לעריכה
+                        <span className="inline-flex items-center gap-1.5 bg-slate-100 text-slate-700 border border-slate-300 font-bold px-2.5 py-1 rounded-lg text-xs shadow-2xs">
+                          <Lock className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                          <span>🔒 ננעל לעריכה (הוגש לרמת"ל)</span>
                         </span>
                       ) : (
                         <div className="flex items-center gap-1">
@@ -982,8 +1068,9 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
                         </button>
                       ) : rowStatus === 'submitted' || rowStatus === 'ramtal_approved' || rowStatus === 'food_dept_approved' || isMonthSubmitted ? (
                         /* 5. נעילה הרמטית של שורות שהוגשו */
-                        <span className="text-slate-400 font-bold text-[11px] inline-flex items-center gap-1">
-                          <Lock className="w-3.5 h-3.5 text-slate-400" /> ננעל לעריכה
+                        <span className="inline-flex items-center gap-1.5 bg-slate-100 text-slate-700 border border-slate-300 font-bold px-2.5 py-1 rounded-lg text-[11px] shadow-2xs">
+                          <Lock className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                          <span>🔒 ננעל לעריכה (הוגש לרמת"ל)</span>
                         </span>
                       ) : (
                         /* טיוטה רגילה - כפתורי פעולות מלאים */
@@ -1105,9 +1192,12 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  if (currentSummary) {
-                    onSubmitMonth(currentSummary.id);
-                  }
+                  onSubmitMonth({
+                    kitchenId: selectedKitchenId,
+                    month: selectedSubmitMonth,
+                    year: selectedSubmitYear,
+                    summaryId: currentSummary?.id
+                  });
                   setShowSubmitConfirmModal(false);
                   setSuccessBannerMessage('הדיווח נשמר והועבר בהצלחה לבקרת הרמת״ל!');
                   setTimeout(() => setSuccessBannerMessage(null), 6000);

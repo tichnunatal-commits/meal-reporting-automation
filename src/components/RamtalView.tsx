@@ -63,15 +63,33 @@ export const RamtalView: React.FC<RamtalViewProps> = ({
   const isSummarySubmitted = currentSummary?.status === 'submitted' || currentSummary?.status === 'ramtal_approved' || currentSummary?.status === 'food_dept_approved' || currentSummary?.status === 'returned_for_revision';
 
   const currentReports = dailyReports.filter(r => {
-    // 6. הסתרת טיוטות: מסך הרמת"ל יציג רק שורות שהוגשו (ממתין לאישור רמת"ל / מאושר / נדרש תיקון)
     const isSubmittedRow = r.status === 'submitted' || r.status === 'ramtal_approved' || r.status === 'food_dept_approved' || r.status === 'returned_for_revision';
     const isKitchenSummarySubmitted = monthlySummaries.some(s => s.kitchenId === r.kitchenId && s.status !== 'draft');
 
     if (selectedKitchenId === 0) {
       return isSubmittedRow || isKitchenSummarySubmitted;
     }
-    return r.kitchenId === selectedKitchenId && (isSubmittedRow || isSummarySubmitted);
+    return r.kitchenId === selectedKitchenId && (isSubmittedRow || isSummarySubmitted || (r.status !== 'draft'));
   });
+
+  // Effective summary to always display summary card even for dynamic kitchens
+  const effectiveSummary: MonthlyKitchenSummary | null = currentSummary || (selectedKitchenId > 0 && currentReports.length > 0 ? {
+    id: selectedKitchenId,
+    kitchenId: selectedKitchenId,
+    kitchenName: selectedKitchen ? selectedKitchen.name : `מטבח #${selectedKitchenId}`,
+    supplierId: selectedKitchen?.supplierId || 1,
+    supplierName: 'ספק מורשה',
+    periodYear: new Date().getFullYear(),
+    periodMonth: new Date().getMonth() + 1,
+    ramtalUserId: currentUser.id,
+    ramtalUserName: currentUser.fullName,
+    totalReportedRaw: currentReports.reduce((s, r) => s + (r.rawReportedQty || 0), 0),
+    totalRamtalApproved: currentReports.reduce((s, r) => s + (r.ramtalAdjustedQty !== undefined ? r.ramtalAdjustedQty : r.rawReportedQty || 0), 0),
+    calculatedNetMeals: 0,
+    calculatedTotalAmountNis: 0,
+    calculationAudit: [],
+    status: currentReports.some(r => r.status === 'submitted') ? 'submitted' : (currentReports[0]?.status || 'submitted')
+  } : null);
 
   // באנר עדכונים חדשים עם נקודה זוהרת
   const newlySubmittedSummaries = monthlySummaries.filter(s => s.status === 'submitted');
@@ -216,32 +234,32 @@ export const RamtalView: React.FC<RamtalViewProps> = ({
             בחר תחנה ספציפית בתפריט לעיל לאישור/החזרה של דוח חודשי שלם
           </div>
         </div>
-      ) : currentSummary ? (
+      ) : effectiveSummary ? (
         <div className="bg-gradient-to-r from-slate-900 to-slate-800 text-white p-6 rounded-2xl shadow-md flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <h3 className="text-lg font-bold">
-                {selectedKitchen ? formatKitchenDisplayName(selectedKitchen) : currentSummary.kitchenName}
+                {selectedKitchen ? formatKitchenDisplayName(selectedKitchen) : effectiveSummary.kitchenName}
               </h3>
               <span className="bg-slate-700 text-slate-300 text-xs px-2 py-0.5 rounded font-mono">
-                {currentSummary.supplierName}
+                {effectiveSummary.supplierName}
               </span>
             </div>
             <div className="flex flex-wrap items-center gap-6 text-xs text-slate-300 pt-2">
-              <div>כמות שדווחה ע"י ספק: <strong className="text-white text-sm">{currentSummary.totalReportedRaw.toLocaleString()}</strong></div>
-              <div>כמות מאושרת רמת"ל: <strong className="text-emerald-400 text-sm">{currentSummary.totalRamtalApproved.toLocaleString()}</strong></div>
+              <div>כמות שדווחה ע"י ספק: <strong className="text-white text-sm">{effectiveSummary.totalReportedRaw.toLocaleString()}</strong></div>
+              <div>כמות מאושרת רמת"ל: <strong className="text-emerald-400 text-sm">{effectiveSummary.totalRamtalApproved.toLocaleString()}</strong></div>
               <div>סטטוס: <strong className="text-blue-300">
-                {currentSummary.status === 'submitted' ? '🔵 ממתין לאישור רמת"ל' :
-                 currentSummary.status === 'ramtal_approved' ? '🟢 אושר רמת"ל' :
-                 currentSummary.status === 'food_dept_approved' ? '🟢 אושר מדור מזון' :
-                 currentSummary.status === 'returned_for_revision' ? '🔴 נדרש תיקון' :
-                 currentSummary.status === 'draft' ? '🟡 טיוטת ספק' : currentSummary.status}
+                {effectiveSummary.status === 'submitted' ? '🔵 ממתין לאישור רמת"ל' :
+                 effectiveSummary.status === 'ramtal_approved' ? '🟢 אושר רמת"ל' :
+                 effectiveSummary.status === 'food_dept_approved' ? '🟢 אושר מדור מזון' :
+                 effectiveSummary.status === 'returned_for_revision' ? '🔴 נדרש תיקון' :
+                 effectiveSummary.status === 'draft' ? '🟡 טיוטת ספק' : effectiveSummary.status}
               </strong></div>
             </div>
           </div>
 
           <div className="flex items-center gap-3 w-full md:w-auto">
-            {currentSummary.status === 'submitted' ? (
+            {effectiveSummary.status === 'submitted' ? (
               <>
                 <button
                   onClick={() => setReturnReasonModal(true)}
@@ -251,7 +269,7 @@ export const RamtalView: React.FC<RamtalViewProps> = ({
                   החזר לעריכת הספק
                 </button>
                 <button
-                  onClick={() => onApproveSummary(currentSummary.id)}
+                  onClick={() => onApproveSummary(effectiveSummary.id)}
                   className="flex-1 md:flex-none flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-2 rounded-xl text-xs font-bold shadow-lg transition cursor-pointer"
                 >
                   <CheckCircle2 className="w-4 h-4" />
@@ -261,7 +279,7 @@ export const RamtalView: React.FC<RamtalViewProps> = ({
             ) : (
               <div className="bg-slate-800/80 border border-slate-700 px-4 py-2 rounded-xl text-xs text-slate-300 flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                <span>הדוח בסטטוס <strong>{currentSummary.status}</strong></span>
+                <span>הדוח בסטטוס <strong>{effectiveSummary.status}</strong></span>
               </div>
             )}
           </div>
