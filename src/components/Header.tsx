@@ -59,7 +59,9 @@ export const Header: React.FC<HeaderProps> = ({
             <div className="flex items-center gap-1.5 bg-slate-800/90 px-2.5 py-1.5 rounded-lg border border-slate-700/70 text-xs text-slate-200">
               <Calendar className="w-3.5 h-3.5 text-blue-400" />
               <span>תקופה:</span>
-              <strong className="text-white font-semibold">08/{selectedPeriod.year}</strong>
+              <strong className="text-white font-semibold">
+                {String(selectedPeriod.month).padStart(2, '0')}/{selectedPeriod.year}
+              </strong>
             </div>
 
             {/* Role Switcher Dropdown — ONLY rendered in Super-Admin mode */}

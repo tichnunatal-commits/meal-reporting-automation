@@ -772,7 +772,10 @@ export const App: React.FC = () => {
       <Header
         currentUser={currentUser}
         onSelectUser={handleSelectUser}
-        selectedPeriod={{ month: 8, year: 2026 }}
+        selectedPeriod={{
+          month: new Date().getMonth() + 1,
+          year: new Date().getFullYear()
+        }}
         onLockSystem={handleLogout}
         onLogout={handleLogout}
         isSuperAdmin={isSuperAdmin}

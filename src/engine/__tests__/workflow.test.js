@@ -287,3 +287,26 @@ test('Uniform Clean Empty State for All 124 Kitchens (Zero Ghost Summaries)', as
     assert.equal(effectiveSummary, null, `Kitchen ${kitchen.name} (ID: ${kitchen.id}) must have null effectiveSummary when 0 reports`);
   }
 });
+
+test('Dynamic Period Tag in Header (MM/YYYY formatting)', () => {
+  const currentMonth = new Date().getMonth() + 1;
+  const currentYear = new Date().getFullYear();
+  const expectedPeriodTag = `${String(currentMonth).padStart(2, '0')}/${currentYear}`;
+
+  // Helper matching Header.tsx formatting
+  const formatPeriodTag = (selectedPeriod) => {
+    return `${String(selectedPeriod.month).padStart(2, '0')}/${selectedPeriod.year}`;
+  };
+
+  const periodObj = { month: currentMonth, year: currentYear };
+  assert.equal(formatPeriodTag(periodObj), expectedPeriodTag, `Period tag must match current month and year dynamically (${expectedPeriodTag})`);
+
+  // Verify Header.tsx and App.tsx file contents no longer contain hardcoded '08/'
+  const headerContent = fs.readFileSync(path.resolve('src/components/Header.tsx'), 'utf-8');
+  assert.ok(!headerContent.includes('08/{selectedPeriod.year}'), 'Header.tsx must not contain hardcoded 08/');
+  assert.ok(headerContent.includes('String(selectedPeriod.month).padStart(2, \'0\')'), 'Header.tsx must format selectedPeriod.month dynamically');
+
+  const appContent = fs.readFileSync(path.resolve('src/App.tsx'), 'utf-8');
+  assert.ok(!appContent.includes('selectedPeriod={{ month: 8, year: 2026 }}'), 'App.tsx must not pass static month 8');
+  assert.ok(appContent.includes('new Date().getMonth() + 1'), 'App.tsx must dynamically compute month');
+});

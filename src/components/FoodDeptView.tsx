@@ -56,7 +56,8 @@ export const FoodDeptView: React.FC<FoodDeptViewProps> = ({
   const totalAmountAllKitchens = monthlySummaries.reduce((sum, s) => sum + s.calculatedTotalAmountNis, 0);
 
   const handleExport = (type: 'excel' | 'pdf') => {
-    setExportNotice(`הופק בהצלחה: דוח סיכום תשלום חודש 08/2026 (${type.toUpperCase()}) עם פילוח חוקי R1-R5`);
+    const currentPeriodStr = `${String(new Date().getMonth() + 1).padStart(2, '0')}/${new Date().getFullYear()}`;
+    setExportNotice(`הופק בהצלחה: דוח סיכום תשלום חודש ${currentPeriodStr} (${type.toUpperCase()}) עם פילוח חוקי R1-R5`);
     setTimeout(() => setExportNotice(null), 4000);
   };
 
