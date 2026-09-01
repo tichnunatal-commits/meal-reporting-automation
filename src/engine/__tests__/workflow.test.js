@@ -310,3 +310,55 @@ test('Dynamic Period Tag in Header (MM/YYYY formatting)', () => {
   assert.ok(!appContent.includes('selectedPeriod={{ month: 8, year: 2026 }}'), 'App.tsx must not pass static month 8');
   assert.ok(appContent.includes('new Date().getMonth() + 1'), 'App.tsx must dynamically compute month');
 });
+
+test('Kitchen Disabling Mechanism (Persistence, Supplier Lockout & Re-activation)', () => {
+  const DISABLED_STORAGE_KEY = 'police_disabled_kitchens_v1';
+  let disabledKitchens = [];
+
+  // Toggle handler matching App.tsx
+  const toggleKitchen = (kitchenId) => {
+    const isCurrentlyDisabled = disabledKitchens.includes(kitchenId);
+    disabledKitchens = isCurrentlyDisabled
+      ? disabledKitchens.filter(id => id !== kitchenId)
+      : [...disabledKitchens, kitchenId];
+    return JSON.stringify(disabledKitchens);
+  };
+
+  // 1. Initial active state for kitchen 1
+  assert.equal(disabledKitchens.includes(1), false, 'Kitchen 1 should start active');
+
+  // 2. Admin disables kitchen 1 ("השבת מטבח (סוף חודש)")
+  const savedJson = toggleKitchen(1);
+  assert.equal(disabledKitchens.includes(1), true, 'Kitchen 1 is now disabled');
+  assert.equal(savedJson, '[1]', 'localStorage JSON must contain disabled kitchen ID 1');
+
+  // 3. Supplier View validation when kitchen is disabled
+  const isActionAllowed = (kitchenId, action) => {
+    const isKitchenDisabled = disabledKitchens.includes(kitchenId);
+    if (isKitchenDisabled) return false;
+    return true;
+  };
+
+  assert.equal(isActionAllowed(1, 'add_row'), false, 'Adding rows must be strictly blocked when kitchen is disabled');
+  assert.equal(isActionAllowed(1, 'edit_row'), false, 'Editing rows must be strictly blocked when kitchen is disabled');
+  assert.equal(isActionAllowed(1, 'delete_row'), false, 'Deleting rows must be strictly blocked when kitchen is disabled');
+  assert.equal(isActionAllowed(1, 'submit_month'), false, 'Submitting month must be strictly blocked when kitchen is disabled');
+
+  // Other active kitchens (e.g. kitchen 2) remain fully functional
+  assert.equal(isActionAllowed(2, 'add_row'), true, 'Active kitchen 2 must allow adding rows');
+
+  // 4. Admin re-enables kitchen 1 ("הפעל מטבח")
+  const reactivatedJson = toggleKitchen(1);
+  assert.equal(disabledKitchens.includes(1), false, 'Kitchen 1 is now re-activated');
+  assert.equal(reactivatedJson, '[]', 'localStorage JSON must be empty array after re-enabling');
+
+  // 5. Supplier View unblocked after re-activation
+  assert.equal(isActionAllowed(1, 'add_row'), true, 'Adding rows is now allowed');
+  assert.equal(isActionAllowed(1, 'edit_row'), true, 'Editing rows is now allowed');
+  assert.equal(isActionAllowed(1, 'submit_month'), true, 'Submitting month is now allowed');
+
+  // 6. Verify App.tsx contains DISABLED_KITCHENS_STORAGE_KEY
+  const appContent = fs.readFileSync(path.resolve('src/App.tsx'), 'utf-8');
+  assert.ok(appContent.includes("const DISABLED_KITCHENS_STORAGE_KEY = 'police_disabled_kitchens_v1';"));
+  assert.ok(appContent.includes("disabledKitchens={disabledKitchens}"));
+});

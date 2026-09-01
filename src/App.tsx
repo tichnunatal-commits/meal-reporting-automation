@@ -52,6 +52,7 @@ export const getAllowedTabsForRole = (role: string): TabKey[] => {
 const AUTH_STORAGE_KEY = 'police_meal_auth_session_v3';
 const REPORTS_STORAGE_KEY = 'police_daily_reports_v3';
 const SUMMARIES_STORAGE_KEY = 'police_monthly_summaries_v3';
+const DISABLED_KITCHENS_STORAGE_KEY = 'police_disabled_kitchens_v1';
 
 interface AuthSessionState {
   isAuthenticated: boolean;
@@ -78,7 +79,35 @@ export const App: React.FC = () => {
 
   const { isAuthenticated, currentUser, isSuperAdmin } = authSession;
 
-  const [kitchens, setKitchens] = useState<Kitchen[]>(mockKitchens);
+  const [disabledKitchens, setDisabledKitchens] = useState<number[]>(() => {
+    try {
+      const saved = localStorage.getItem(DISABLED_KITCHENS_STORAGE_KEY);
+      if (saved !== null) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch (e) {
+      console.error('Failed to load disabled kitchens from localStorage:', e);
+    }
+    return [];
+  });
+
+  const [kitchens, setKitchens] = useState<Kitchen[]>(() => {
+    let savedDisabled: number[] = [];
+    try {
+      const saved = localStorage.getItem(DISABLED_KITCHENS_STORAGE_KEY);
+      if (saved !== null) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) savedDisabled = parsed;
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return mockKitchens.map(k => ({
+      ...k,
+      isActive: savedDisabled.includes(k.id) ? false : k.isActive
+    }));
+  });
   const [tariffs, setTariffs] = useState<KitchenTariff[]>(mockTariffs);
 
   // 2. שמירת נתונים קבועה בדפדפן (LocalStorage Persistence)
@@ -109,6 +138,15 @@ export const App: React.FC = () => {
   });
 
   const [activeTab, setActiveTab] = useState<TabKey>('supplier');
+
+  // שמירה אוטומטית ל-localStorage בכל שינוי
+  useEffect(() => {
+    try {
+      localStorage.setItem(DISABLED_KITCHENS_STORAGE_KEY, JSON.stringify(disabledKitchens));
+    } catch (e) {
+      console.error('Failed to persist disabled kitchens to localStorage:', e);
+    }
+  }, [disabledKitchens]);
 
   // שמירה אוטומטית ל-localStorage בכל שינוי
   useEffect(() => {
@@ -619,6 +657,19 @@ export const App: React.FC = () => {
       console.error(e);
     }
 
+    setDisabledKitchens(prev => {
+      const isCurrentlyDisabled = prev.includes(kitchenId);
+      const updated = isCurrentlyDisabled
+        ? prev.filter(id => id !== kitchenId)
+        : [...prev, kitchenId];
+      try {
+        localStorage.setItem(DISABLED_KITCHENS_STORAGE_KEY, JSON.stringify(updated));
+      } catch (err) {
+        console.error(err);
+      }
+      return updated;
+    });
+
     setKitchens(prev => prev.map(k => {
       if (k.id === kitchenId) {
         return { ...k, isActive: !k.isActive };
@@ -899,6 +950,7 @@ export const App: React.FC = () => {
             currentUser={currentUser}
             isSuperAdmin={isSuperAdmin}
             kitchens={kitchens}
+            disabledKitchens={disabledKitchens}
             mealTypes={mockMealTypes}
             dailyReports={dailyReports}
             monthlySummaries={monthlySummaries}
@@ -907,6 +959,7 @@ export const App: React.FC = () => {
             onDuplicateDailyReport={handleDuplicateDailyReport}
             onDeleteDailyReport={handleDeleteDailyReport}
             onSubmitMonth={handleSubmitMonth}
+            onToggleKitchenActive={handleToggleKitchenActive}
             onAdminResetDrafts={handleAdminResetDrafts}
             onAdminDeleteAllReports={handleAdminDeleteAllReports}
           />

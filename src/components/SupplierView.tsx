@@ -27,6 +27,7 @@ interface SupplierViewProps {
   currentUser: User;
   isSuperAdmin?: boolean;
   kitchens: Kitchen[];
+  disabledKitchens?: number[];
   mealTypes: MealType[];
   dailyReports: DailyReportRow[];
   monthlySummaries: MonthlyKitchenSummary[];
@@ -35,6 +36,7 @@ interface SupplierViewProps {
   onDuplicateDailyReport?: (rowId: number) => void;
   onDeleteDailyReport?: (rowId: number) => void;
   onSubmitMonth: (options: { kitchenId: number; month: number; year: number; summaryId?: number }) => void;
+  onToggleKitchenActive?: (kitchenId: number) => void;
   onAdminResetDrafts?: (options: { scope?: 'current_kitchen' | 'current_supplier' | 'all_kitchens'; kitchenId?: number; supplierId?: number; filterType: 'today' | 'month' | 'all' }) => void;
   onAdminDeleteAllReports?: (options: { scope?: 'current_kitchen' | 'current_supplier' | 'all_kitchens'; kitchenId?: number; supplierId?: number; filterType: 'today' | 'month' | 'all' }) => void;
 }
@@ -43,6 +45,7 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
   currentUser,
   isSuperAdmin = false,
   kitchens,
+  disabledKitchens = [],
   mealTypes,
   dailyReports,
   monthlySummaries,
@@ -51,6 +54,7 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
   onDuplicateDailyReport,
   onDeleteDailyReport,
   onSubmitMonth,
+  onToggleKitchenActive,
   onAdminResetDrafts,
   onAdminDeleteAllReports
 }) => {
@@ -78,6 +82,7 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
   }, [adminSupplierFilter, myKitchens]);
 
   const selectedKitchen = kitchens.find(k => k.id === selectedKitchenId);
+  const isKitchenDisabled = disabledKitchens.includes(selectedKitchenId) || selectedKitchen?.isActive === false;
   const currentSummary = monthlySummaries.find(s => s.kitchenId === selectedKitchenId);
   const currentReports = dailyReports.filter(r => r.kitchenId === selectedKitchenId && r.status !== 'deleted_by_supplier');
   const isMonthSubmitted = currentSummary?.status === 'submitted' || currentSummary?.status === 'ramtal_approved' || currentSummary?.status === 'food_dept_approved' || currentSummary?.status === 'locked';
@@ -138,6 +143,10 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
   };
 
   const startEditRow = (row: DailyReportRow) => {
+    if (isKitchenDisabled) {
+      alert('תחנה זו הושבתה ע"י מנהל המערכת (סוף חודש). עריכת שורות חסומה כעת!');
+      return;
+    }
     setEditingRowId(row.id);
     setEditDate(row.reportDate);
     setEditMealTypeId(row.mealTypeId);
@@ -153,6 +162,10 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
   };
 
   const saveEditRow = (row: DailyReportRow) => {
+    if (isKitchenDisabled) {
+      alert('תחנה זו הושבתה ע"י מנהל המערכת (סוף חודש). עריכת שורות חסומה כעת!');
+      return;
+    }
     if (!editNotes.trim()) {
       alert('הערה לשורה / מספר אסמכתא הינו שדה חובה (*)!');
       return;
@@ -204,6 +217,10 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
   };
 
   const confirmDeleteRow = (rowId: number) => {
+    if (isKitchenDisabled) {
+      alert('תחנה זו הושבתה ע"י מנהל המערכת (סוף חודש). מחיקת שורות חסומה כעת!');
+      return;
+    }
     if (onDeleteDailyReport) {
       onDeleteDailyReport(rowId);
     }
@@ -212,6 +229,11 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
 
   const handleAddRow = (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (isKitchenDisabled) {
+      alert('תחנה זו הושבתה ע"י מנהל המערכת (סוף חודש). הזנת דיווחים, עריכה ושליחה לבדיקה חסומות כעת.');
+      return;
+    }
 
     // 1. Mandatory note validation
     if (!notes.trim()) {
@@ -386,6 +408,19 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
                 <Trash2 className="w-4 h-4 text-rose-400" />
                 <span>מאסטר: מחיקת כל הדיווחים</span>
               </button>
+
+              <button
+                type="button"
+                onClick={() => onToggleKitchenActive && onToggleKitchenActive(selectedKitchenId)}
+                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer shadow-xs ${
+                  isKitchenDisabled
+                    ? 'bg-emerald-500/25 hover:bg-emerald-500/40 text-emerald-200 border border-emerald-400/50'
+                    : 'bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 border border-rose-400/40'
+                }`}
+                title="שינוי סטטוס פעילות התחנה הנבחרת"
+              >
+                <span>{isKitchenDisabled ? '✅ הפעל מטבח' : '⛔ השבת מטבח (סוף חודש)'}</span>
+              </button>
             </div>
 
             <div className="text-[11px] text-slate-400">
@@ -543,6 +578,23 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
           </div>
         );
       })()}
+
+      {/* 2. באנר אזהרה בולט כאשר התחנה מושבתת (סוף חודש) */}
+      {isKitchenDisabled && (
+        <div className="bg-rose-950/90 border-2 border-rose-500 text-rose-100 p-4 rounded-2xl shadow-lg flex items-center gap-3 text-xs sm:text-sm font-bold">
+          <div className="p-2 bg-rose-900 rounded-xl border border-rose-400/50 shrink-0 text-xl">
+            ⛔
+          </div>
+          <div className="space-y-0.5">
+            <div className="text-white font-extrabold text-sm sm:text-base">
+              ⛔ תחנה זו הושבתה ע"י מנהל המערכת (סוף חודש).
+            </div>
+            <div className="text-rose-200 text-xs font-normal">
+              הזנת דיווחים, עריכה ושליחה לבדיקה חסומות כעת.
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Daily Input Form */}
       <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs">
@@ -727,10 +779,16 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
 
             <button
               type="submit"
-              className="w-full bg-slate-900 hover:bg-slate-800 active:bg-black text-white font-bold text-xs sm:text-sm py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition shadow-xs cursor-pointer min-h-[44px]"
+              disabled={isKitchenDisabled}
+              title={isKitchenDisabled ? 'תחנה זו הושבתה ע"י מנהל המערכת (סוף חודש)' : ''}
+              className={`w-full font-bold text-xs sm:text-sm py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition shadow-xs min-h-[44px] ${
+                isKitchenDisabled
+                  ? 'bg-slate-300 text-slate-500 border border-slate-300 cursor-not-allowed opacity-60'
+                  : 'bg-slate-900 hover:bg-slate-800 active:bg-black text-white cursor-pointer'
+              }`}
             >
               <Plus className="w-4 h-4" />
-              הוסף שורת דיווח
+              {isKitchenDisabled ? 'הזנת שורה חסומה (תחנה מושבתת)' : 'הוסף שורת דיווח'}
             </button>
           </div>
 
@@ -751,6 +809,20 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
 
           {/* 6. כפתור סיום דיווח חודשי בראש הטבלה */}
           {(() => {
+            if (isKitchenDisabled) {
+              return (
+                <button
+                  type="button"
+                  disabled
+                  title={'תחנה זו הושבתה ע"י מנהל המערכת (סוף חודש)'}
+                  className="inline-flex items-center justify-center gap-2 bg-rose-100 text-rose-700 border border-rose-300 font-bold text-xs px-4 py-2.5 rounded-xl cursor-not-allowed min-h-[44px]"
+                >
+                  <Lock className="w-4 h-4 text-rose-600" />
+                  <span>⛔ הגשה חסומה (תחנה מושבתת)</span>
+                </button>
+              );
+            }
+
             const hasUnsubmitted = currentReports.some(r => (r.status || 'draft') === 'draft' || r.status === 'returned_for_revision');
             const allApproved = currentReports.length > 0 && currentReports.every(r => r.status === 'ramtal_approved' || r.status === 'food_dept_approved');
 
@@ -859,7 +931,12 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
                     </div>
 
                     <div>
-                      {rowStatus === 'returned_for_revision' || rowStatus === 'rejected' ? (
+                      {isKitchenDisabled ? (
+                        <span className="inline-flex items-center gap-1.5 bg-rose-50 text-rose-800 border border-rose-200 font-bold px-2.5 py-1 rounded-lg text-xs shadow-2xs">
+                          <Lock className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                          <span>⛔ מושבת (מנהל)</span>
+                        </span>
+                      ) : rowStatus === 'returned_for_revision' || rowStatus === 'rejected' ? (
                         <div className="flex items-center gap-1.5">
                           <button
                             type="button"
@@ -1089,7 +1166,12 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
 
                     {/* 10. פעולות (5. נעילה הרמטית של שורות שהוגשו, חריג לנדרש תיקון) */}
                     <td className="p-3 text-center">
-                      {isEditing ? (
+                      {isKitchenDisabled ? (
+                        <span className="inline-flex items-center gap-1.5 bg-rose-50 text-rose-800 border border-rose-200 font-bold px-2.5 py-1 rounded-lg text-[11px] shadow-2xs">
+                          <Lock className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                          <span>⛔ תחנה מושבתת</span>
+                        </span>
+                      ) : isEditing ? (
                         <div className="flex items-center justify-center gap-1">
                           <button
                             type="button"
