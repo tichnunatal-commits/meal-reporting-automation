@@ -76,6 +76,45 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
 
   const [selectedKitchenId, setSelectedKitchenId] = useState<number>(myKitchens[0]?.id || 1);
 
+  // 1. סריקה חוצת-מטבחים של הספק המחובר (Cross-Kitchen Status Audit)
+  const returnedKitchens = myKitchens.filter(k => {
+    const summary = monthlySummaries.find(s => s.kitchenId === k.id);
+    const kReports = dailyReports.filter(r => r.kitchenId === k.id);
+    const isSummaryReturned = summary?.status === 'returned_for_revision' || summary?.status === 'rejected';
+    const hasReturnedRows = kReports.some(r => r.status === 'returned_for_revision' || r.status === 'rejected');
+    return isSummaryReturned || hasReturnedRows;
+  });
+
+  const approvedKitchens = myKitchens.filter(k => {
+    if (returnedKitchens.some(rk => rk.id === k.id)) return false;
+    const summary = monthlySummaries.find(s => s.kitchenId === k.id);
+    return summary?.status === 'ramtal_approved' || summary?.status === 'approved' || summary?.status === 'food_dept_approved';
+  });
+
+  const [dismissedApprovedIds, setDismissedApprovedIds] = useState<number[]>(() => {
+    try {
+      const saved = sessionStorage.getItem('police_dismissed_approved_banners');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const handleDismissApprovedAlert = (kitchenIdsToDismiss?: number[]) => {
+    setDismissedApprovedIds(prev => {
+      const idsToAdd = kitchenIdsToDismiss || approvedKitchens.map(k => k.id);
+      const updated = Array.from(new Set([...prev, ...idsToAdd]));
+      try {
+        sessionStorage.setItem('police_dismissed_approved_banners', JSON.stringify(updated));
+      } catch (e) {
+        console.error(e);
+      }
+      return updated;
+    });
+  };
+
+  const activeApprovedKitchens = approvedKitchens.filter(k => !dismissedApprovedIds.includes(k.id));
+
   // Sync selectedKitchenId when supplier filter changes
   React.useEffect(() => {
     if (myKitchens.length > 0 && !myKitchens.some(k => k.id === selectedKitchenId)) {
@@ -438,6 +477,100 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
             <div className="text-[11px] text-slate-400">
               סה"כ דיווחים שמורים במערכת: <strong className="text-white">{dailyReports.length}</strong> שורות (מתוכם <strong className="text-amber-300">{dailyReports.filter(r => (r.status || 'draft') === 'draft').length}</strong> טיוטות)
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 2. באנר התראה חוצה-מטבחים: דיווחים שחזרו לתיקון מהרמת"ל (אדום/כתום) */}
+      {returnedKitchens.length > 0 && (
+        <div className="bg-gradient-to-r from-rose-900 via-rose-800 to-amber-900 border-2 border-rose-500/80 text-white p-4 sm:p-5 rounded-2xl shadow-xl space-y-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 bg-rose-500/20 rounded-xl border border-rose-400/40 shrink-0">
+                <AlertTriangle className="w-5 h-5 text-rose-300 animate-pulse" />
+              </div>
+              <div>
+                <h3 className="text-sm sm:text-base font-extrabold text-white flex items-center gap-2">
+                  <span>⚠️ שים לב: התקבלו דיווחים שחזרו לתיקון מהרמת"ל בתחנות הבאות:</span>
+                </h3>
+                <p className="text-xs text-rose-200 mt-0.5">
+                  קיימים דיווחים הדורשים תיקון והגשה מחדש ע"י הספק כדי לאפשר סגירת חודש ותשלום.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2 pt-1 border-t border-rose-700/50">
+            {returnedKitchens.map(k => (
+              <div
+                key={k.id}
+                className="bg-rose-950/80 border border-rose-400/40 rounded-xl px-3 py-1.5 flex items-center justify-between gap-3 shadow-xs"
+              >
+                <span className="text-xs font-bold text-rose-100">{k.name}</span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedKitchenId(k.id)}
+                  className={`text-[11px] font-bold px-2.5 py-1 rounded-lg transition flex items-center gap-1 cursor-pointer ${
+                    selectedKitchenId === k.id
+                      ? 'bg-amber-400 text-slate-950 shadow-xs'
+                      : 'bg-rose-600 hover:bg-rose-500 text-white'
+                  }`}
+                >
+                  <span>{selectedKitchenId === k.id ? '📍 בתצוגה כעת' : 'עבור לתיקון ➔'}</span>
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 3. באנר התראה חוצה-מטבחים: דיווחים שאושרו ע"י הרמת"ל (ירוק) */}
+      {activeApprovedKitchens.length > 0 && (
+        <div className="bg-gradient-to-r from-emerald-900 via-teal-900 to-slate-900 border-2 border-emerald-500/80 text-white p-4 sm:p-5 rounded-2xl shadow-xl space-y-3 relative">
+          <button
+            type="button"
+            onClick={() => handleDismissApprovedAlert()}
+            className="absolute top-3 left-3 text-emerald-200 hover:text-white bg-emerald-800/50 hover:bg-emerald-700/60 p-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer border border-emerald-500/30"
+            title="הבנתי / סגור התראה"
+          >
+            <X className="w-4 h-4" />
+            <span className="hidden sm:inline">הבנתי / סגור</span>
+          </button>
+
+          <div className="flex items-start gap-2.5 pr-0 sm:pr-2">
+            <div className="p-2 bg-emerald-500/20 rounded-xl border border-emerald-400/40 shrink-0">
+              <CheckCircle2 className="w-5 h-5 text-emerald-300" />
+            </div>
+            <div>
+              <h3 className="text-sm sm:text-base font-extrabold text-white flex items-center gap-2">
+                <span>✅ עדכון: הדיווח החודשי אושר בהצלחה ע"י הרמת"ל בתחנות הבאות:</span>
+              </h3>
+              <p className="text-xs text-emerald-200 mt-0.5">
+                הדוחות אושרו רשמית והועברו לבקרת מדור מזון (R1–R5).
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2 pt-1 border-t border-emerald-800/50">
+            {activeApprovedKitchens.map(k => (
+              <div
+                key={k.id}
+                className="bg-emerald-950/80 border border-emerald-400/40 rounded-xl px-3 py-1.5 flex items-center justify-between gap-3 shadow-xs"
+              >
+                <span className="text-xs font-bold text-emerald-100">{k.name}</span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedKitchenId(k.id)}
+                  className={`text-[11px] font-bold px-2.5 py-1 rounded-lg transition flex items-center gap-1 cursor-pointer ${
+                    selectedKitchenId === k.id
+                      ? 'bg-emerald-400 text-slate-950 shadow-xs'
+                      : 'bg-emerald-700 hover:bg-emerald-600 text-white'
+                  }`}
+                >
+                  <span>{selectedKitchenId === k.id ? '📍 בתצוגה כעת' : 'צפה באישור ➔'}</span>
+                </button>
+              </div>
+            ))}
           </div>
         </div>
       )}

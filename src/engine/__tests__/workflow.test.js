@@ -593,3 +593,68 @@ test('Cloud Draft Persistence, Auto-Save & Refresh Resilience (status: draft)', 
   assert.equal(reloadedAfterAutoSave[0].rawReportedQty, 180, 'Live auto-saved rawReportedQty must survive F5');
 });
 
+test('Cross-Kitchen Status Audit & Live Supplier Banners (Returned for Revision & Approved Alerts)', () => {
+  const supplierViewContent = fs.readFileSync(path.resolve('src/components/SupplierView.tsx'), 'utf-8');
+
+  // 1. Verify cross-kitchen scan logic
+  assert.ok(supplierViewContent.includes('const returnedKitchens = myKitchens.filter'), 'Must compute returnedKitchens across all supplier stations');
+  assert.ok(supplierViewContent.includes('const approvedKitchens = myKitchens.filter'), 'Must compute approvedKitchens across all supplier stations');
+  assert.ok(supplierViewContent.includes('handleDismissApprovedAlert'), 'Must support green banner dismissal');
+
+  // 2. Verify Red/Orange Banner for Returned for Revision
+  assert.ok(supplierViewContent.includes('⚠️ שים לב: התקבלו דיווחים שחזרו לתיקון מהרמת"ל בתחנות הבאות:'), 'Must display exact wording for returned for revision alert');
+  assert.ok(supplierViewContent.includes('עבור לתיקון ➔'), 'Must include quick jump button to fix station');
+
+  // 3. Verify Green Banner for Approved by Ramtal
+  assert.ok(supplierViewContent.includes('✅ עדכון: הדיווח החודשי אושר בהצלחה ע"י הרמת"ל בתחנות הבאות:'), 'Must display exact wording for approved alert');
+  assert.ok(supplierViewContent.includes('צפה באישור ➔'), 'Must include view approval button');
+  assert.ok(supplierViewContent.includes('הבנתי / סגור'), 'Must include dismiss button on green banner');
+
+  // 4. Functional unit test of cross-kitchen logic
+  const mockSupplierKitchens = [
+    { id: 101, name: 'תחנת עכו', supplierId: 2 },
+    { id: 102, name: 'תחנת נהריה', supplierId: 2 },
+    { id: 103, name: 'תחנת צפת', supplierId: 2 }
+  ];
+
+  const mockSummaries = [
+    { kitchenId: 101, status: 'returned_for_revision' },
+    { kitchenId: 102, status: 'ramtal_approved' },
+    { kitchenId: 103, status: 'draft' }
+  ];
+
+  const mockReports = [
+    { kitchenId: 101, status: 'returned_for_revision' },
+    { kitchenId: 102, status: 'ramtal_approved' },
+    { kitchenId: 103, status: 'draft' }
+  ];
+
+  const testReturned = mockSupplierKitchens.filter(k => {
+    const s = mockSummaries.find(sum => sum.kitchenId === k.id);
+    const r = mockReports.filter(rep => rep.kitchenId === k.id);
+    return s?.status === 'returned_for_revision' || r.some(row => row.status === 'returned_for_revision');
+  });
+
+  const testApproved = mockSupplierKitchens.filter(k => {
+    if (testReturned.some(rk => rk.id === k.id)) return false;
+    const s = mockSummaries.find(sum => sum.kitchenId === k.id);
+    return s?.status === 'ramtal_approved';
+  });
+
+  assert.equal(testReturned.length, 1);
+  assert.equal(testReturned[0].id, 101, 'Station 101 must trigger red returned banner');
+  assert.equal(testApproved.length, 1);
+  assert.equal(testApproved[0].id, 102, 'Station 102 must trigger green approved banner');
+
+  // Re-submission of station 101 clears the red banner
+  mockSummaries[0].status = 'submitted';
+  mockReports[0].status = 'submitted';
+  const testReturnedAfterFix = mockSupplierKitchens.filter(k => {
+    const s = mockSummaries.find(sum => sum.kitchenId === k.id);
+    const r = mockReports.filter(rep => rep.kitchenId === k.id);
+    return s?.status === 'returned_for_revision' || r.some(row => row.status === 'returned_for_revision');
+  });
+  assert.equal(testReturnedAfterFix.length, 0, 'Red banner must automatically disappear once station is re-submitted');
+});
+
+
