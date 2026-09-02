@@ -362,3 +362,28 @@ test('Kitchen Disabling Mechanism (Persistence, Supplier Lockout & Re-activation
   assert.ok(appContent.includes("const DISABLED_KITCHENS_STORAGE_KEY = 'police_disabled_kitchens_v1';"));
   assert.ok(appContent.includes("disabledKitchens={disabledKitchens}"));
 });
+
+test('Firebase Firestore Cloud Migration (Collections, Rules, Seeding & Real-Time Listeners)', () => {
+  // 1. Verify src/data/firebase.ts exists and defines the 3 collections
+  const firebaseTs = fs.readFileSync(path.resolve('src/data/firebase.ts'), 'utf-8');
+  assert.ok(firebaseTs.includes("DAILY_REPORTS: 'daily_reports'"), 'Must define daily_reports collection');
+  assert.ok(firebaseTs.includes("MONTHLY_SUMMARIES: 'monthly_summaries'"), 'Must define monthly_summaries collection');
+  assert.ok(firebaseTs.includes("APP_CONFIG: 'app_config'"), 'Must define app_config collection');
+  assert.ok(firebaseTs.includes('persistentLocalCache'), 'Must enable offline cache persistence');
+  assert.ok(firebaseTs.includes('seedInitialDataIfEmpty'), 'Must include seedInitialDataIfEmpty');
+
+  // 2. Verify firestore.rules exists and covers collections
+  const rules = fs.readFileSync(path.resolve('firestore.rules'), 'utf-8');
+  assert.ok(rules.includes('match /daily_reports/{reportId}'), 'Rules must cover daily_reports');
+  assert.ok(rules.includes('match /monthly_summaries/{summaryId}'), 'Rules must cover monthly_summaries');
+  assert.ok(rules.includes('match /app_config/{configId}'), 'Rules must cover app_config');
+
+  // 3. Verify App.tsx subscribes to real-time listeners and writes to Firestore
+  const appContent = fs.readFileSync(path.resolve('src/App.tsx'), 'utf-8');
+  assert.ok(appContent.includes('subscribeToDailyReports'), 'App.tsx must subscribe to daily_reports');
+  assert.ok(appContent.includes('subscribeToMonthlySummaries'), 'App.tsx must subscribe to monthly_summaries');
+  assert.ok(appContent.includes('subscribeToAppConfig'), 'App.tsx must subscribe to app_config');
+  assert.ok(appContent.includes('saveDailyReportToFirestore'), 'App.tsx must sync daily reports to Firestore');
+  assert.ok(appContent.includes('saveMonthlySummaryToFirestore'), 'App.tsx must sync monthly summaries to Firestore');
+  assert.ok(appContent.includes('saveDisabledKitchensToFirestore'), 'App.tsx must sync disabled kitchens to Firestore');
+});

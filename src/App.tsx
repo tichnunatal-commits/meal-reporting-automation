@@ -18,6 +18,18 @@ import {
 import { DailyReportRow, Kitchen, KitchenTariff, MonthlyKitchenSummary, User } from './types';
 import { MealCalculationEngine } from './engine/calculator';
 import {
+  seedInitialDataIfEmpty,
+  subscribeToDailyReports,
+  subscribeToMonthlySummaries,
+  subscribeToAppConfig,
+  saveDailyReportToFirestore,
+  deleteDailyReportFromFirestore,
+  saveMonthlySummaryToFirestore,
+  saveDisabledKitchensToFirestore,
+  batchDeleteReportsFromFirestore,
+  batchUpdateReportsStatusInFirestore
+} from './data/firebase';
+import {
   FileEdit,
   CheckCircle2,
   BarChart3,
@@ -110,7 +122,7 @@ export const App: React.FC = () => {
   });
   const [tariffs, setTariffs] = useState<KitchenTariff[]>(mockTariffs);
 
-  // 2. שמירת נתונים קבועה בדפדפן (LocalStorage Persistence)
+  // 2. שמירת נתונים קבועה (LocalStorage Fallback + Firestore Real-Time)
   const [dailyReports, setDailyReports] = useState<DailyReportRow[]>(() => {
     try {
       const saved = localStorage.getItem(REPORTS_STORAGE_KEY);
@@ -139,7 +151,7 @@ export const App: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<TabKey>('supplier');
 
-  // שמירה אוטומטית ל-localStorage בכל שינוי
+  // שמירה ל-localStorage כגיבוי מקומי מהיר
   useEffect(() => {
     try {
       localStorage.setItem(DISABLED_KITCHENS_STORAGE_KEY, JSON.stringify(disabledKitchens));
@@ -148,7 +160,6 @@ export const App: React.FC = () => {
     }
   }, [disabledKitchens]);
 
-  // שמירה אוטומטית ל-localStorage בכל שינוי
   useEffect(() => {
     try {
       localStorage.setItem(REPORTS_STORAGE_KEY, JSON.stringify(dailyReports));
@@ -164,6 +175,39 @@ export const App: React.FC = () => {
       console.error('Failed to persist monthly summaries to localStorage:', e);
     }
   }, [monthlySummaries]);
+
+  // 1. אתחול Firestore וסנכרון בזמן אמת (Real-time onSnapshot Listeners)
+  useEffect(() => {
+    // אתחול נתונים חכם (Data Seeding) אם הענן ריק
+    seedInitialDataIfEmpty(dailyReports, monthlySummaries, disabledKitchens).catch(console.error);
+
+    // האזנה בזמן אמת לכל שורות הדיווח (daily_reports)
+    const unsubDaily = subscribeToDailyReports((reports) => {
+      setDailyReports(reports);
+    });
+
+    // האזנה בזמן אמת לסיכומים החודשיים (monthly_summaries)
+    const unsubSummaries = subscribeToMonthlySummaries((summaries) => {
+      setMonthlySummaries(summaries);
+    });
+
+    // האזנה בזמן אמת להגדרות המערכת ולמטבחים מושבתים (app_config)
+    const unsubConfig = subscribeToAppConfig((config) => {
+      if (config && Array.isArray(config.disabledKitchens)) {
+        setDisabledKitchens(config.disabledKitchens);
+        setKitchens(prev => prev.map(k => ({
+          ...k,
+          isActive: !config.disabledKitchens.includes(k.id)
+        })));
+      }
+    });
+
+    return () => {
+      unsubDaily();
+      unsubSummaries();
+      unsubConfig();
+    };
+  }, []);
 
   const allowedTabs = getAllowedTabsForRole(currentUser.role);
 
@@ -303,15 +347,18 @@ export const App: React.FC = () => {
       id: Date.now()
     };
     setDailyReports(prev => [created, ...prev]);
+    saveDailyReportToFirestore(created).catch(console.error);
 
     setMonthlySummaries(prev => prev.map(s => {
       if (s.kitchenId === newRow.kitchenId) {
         const newTotalRaw = s.totalReportedRaw + newRow.rawReportedQty;
-        return {
+        const updatedSummary = {
           ...s,
           totalReportedRaw: newTotalRaw,
           totalRamtalApproved: newTotalRaw
         };
+        saveMonthlySummaryToFirestore(updatedSummary).catch(console.error);
+        return updatedSummary;
       }
       return s;
     }));
@@ -324,11 +371,15 @@ export const App: React.FC = () => {
       : updatedRow;
 
     setDailyReports(prev => prev.map(r => r.id === finalRow.id ? finalRow : r));
+    saveDailyReportToFirestore(finalRow).catch(console.error);
+
     setMonthlySummaries(prev => prev.map(s => {
       if (s.kitchenId === finalRow.kitchenId) {
         const kitchenRows = dailyReports.map(r => r.id === finalRow.id ? finalRow : r).filter(r => r.kitchenId === finalRow.kitchenId);
         const sum = kitchenRows.reduce((acc, curr) => acc + (curr.rawReportedQty || 0), 0);
-        return { ...s, totalReportedRaw: sum, totalRamtalApproved: sum };
+        const updatedSummary = { ...s, totalReportedRaw: sum, totalRamtalApproved: sum };
+        saveMonthlySummaryToFirestore(updatedSummary).catch(console.error);
+        return updatedSummary;
       }
       return s;
     }));
@@ -346,11 +397,14 @@ export const App: React.FC = () => {
     };
 
     setDailyReports(prev => [duplicated, ...prev]);
+    saveDailyReportToFirestore(duplicated).catch(console.error);
 
     setMonthlySummaries(prev => prev.map(s => {
       if (s.kitchenId === target.kitchenId) {
         const sum = s.totalReportedRaw + duplicated.rawReportedQty;
-        return { ...s, totalReportedRaw: sum, totalRamtalApproved: sum };
+        const updatedSummary = { ...s, totalReportedRaw: sum, totalRamtalApproved: sum };
+        saveMonthlySummaryToFirestore(updatedSummary).catch(console.error);
+        return updatedSummary;
       }
       return s;
     }));
@@ -364,18 +418,21 @@ export const App: React.FC = () => {
 
     if (isRevision) {
       // 1. תיעוד מחיקת שורות שהוחזרו לתיקון (Audit Trail במסך הרמת"ל)
-      // במסך הספק: השורה מוסרת (סטטוס deleted_by_supplier)
-      // במסך הרמת"ל: השורה נשמרת בסטטוס deleted_by_supplier כ-Audit Log
-      setDailyReports(prev => prev.map(r => r.id === rowId ? { ...r, status: 'deleted_by_supplier' as const } : r));
+      const updatedTarget: DailyReportRow = { ...target, status: 'deleted_by_supplier' };
+      setDailyReports(prev => prev.map(r => r.id === rowId ? updatedTarget : r));
+      saveDailyReportToFirestore(updatedTarget).catch(console.error);
     } else {
       // טיוטה רגילה של ספק נמחקת לחלוטין
       setDailyReports(prev => prev.filter(r => r.id !== rowId));
+      deleteDailyReportFromFirestore(rowId).catch(console.error);
     }
 
     setMonthlySummaries(prev => prev.map(s => {
       if (s.kitchenId === target.kitchenId) {
         const sum = Math.max(0, s.totalReportedRaw - target.rawReportedQty);
-        return { ...s, totalReportedRaw: sum, totalRamtalApproved: sum };
+        const updatedSummary = { ...s, totalReportedRaw: sum, totalRamtalApproved: sum };
+        saveMonthlySummaryToFirestore(updatedSummary).catch(console.error);
+        return updatedSummary;
       }
       return s;
     }));
@@ -425,59 +482,68 @@ export const App: React.FC = () => {
     }
 
     // 1. חוק ברזל: עדכון ל-submitted אך ורק עבור שורות בסטטוס draft!
-    // אסור לשנות או לגעת בשורות שנמצאות בסטטוס rejected (נדרש תיקון) או approved / ramtal_approved!
-    setDailyReports(prev => prev.map(r => {
+    const updatedReports = dailyReports.map(r => {
       if (r.kitchenId === kitchenId) {
         const isDraft = (r.status || 'draft') === 'draft';
         if (isDraft && isRowInTargetPeriod(r.reportDate, month, year)) {
-          return { ...r, status: 'submitted' };
+          const updated = { ...r, status: 'submitted' as const };
+          saveDailyReportToFirestore(updated).catch(console.error);
+          return updated;
         }
       }
       return r;
-    }));
+    });
+    setDailyReports(updatedReports);
 
     // 2. עדכון / יצירת סיכום חודשי עבור המטבח
-    setMonthlySummaries(prev => {
-      const existingIdx = prev.findIndex(s => s.kitchenId === kitchenId || (summaryId && s.id === summaryId));
-      const kitchenReports = dailyReports.filter(r => r.kitchenId === kitchenId);
-      const totalRaw = kitchenReports.reduce((acc, curr) => acc + (curr.rawReportedQty || 0), 0);
+    const kitchenReports = updatedReports.filter(r => r.kitchenId === kitchenId);
+    const totalRaw = kitchenReports.reduce((acc, curr) => acc + (curr.rawReportedQty || 0), 0);
+    const existing = monthlySummaries.find(s => s.kitchenId === kitchenId || (summaryId && s.id === summaryId));
 
-      if (existingIdx >= 0) {
-        const updated = [...prev];
-        const s = updated[existingIdx];
-        updated[existingIdx] = {
-          ...s,
-          status: 'submitted',
-          submittedAt: nowIso,
-          periodYear: year,
-          periodMonth: month,
-          totalReportedRaw: totalRaw > 0 ? totalRaw : s.totalReportedRaw,
-          totalRamtalApproved: totalRaw > 0 ? totalRaw : s.totalRamtalApproved
-        };
-        return updated;
-      } else {
-        const k = kitchens.find(k => k.id === kitchenId);
-        const newSummary: MonthlyKitchenSummary = {
-          id: summaryId || Date.now(),
-          kitchenId,
-          kitchenName: k?.name || `מטבח #${kitchenId}`,
-          supplierId: k?.supplierId || currentUser.supplierId || 1,
-          supplierName: currentUser.fullName,
-          periodYear: year,
-          periodMonth: month,
-          ramtalUserId: k?.defaultRamtalUserId || 2,
-          ramtalUserName: 'רפ"ק אבי כהן (רמת"ל)',
-          totalReportedRaw: totalRaw,
-          totalRamtalApproved: totalRaw,
-          calculatedNetMeals: totalRaw,
-          calculatedTotalAmountNis: 0,
-          calculationAudit: [],
-          status: 'submitted',
-          submittedAt: nowIso
-        };
-        return [newSummary, ...prev];
+    let summaryToSave: MonthlyKitchenSummary;
+    if (existing) {
+      summaryToSave = {
+        ...existing,
+        status: 'submitted',
+        submittedAt: nowIso,
+        periodYear: year,
+        periodMonth: month,
+        totalReportedRaw: totalRaw > 0 ? totalRaw : existing.totalReportedRaw,
+        totalRamtalApproved: totalRaw > 0 ? totalRaw : existing.totalRamtalApproved
+      };
+    } else {
+      const k = kitchens.find(k => k.id === kitchenId);
+      summaryToSave = {
+        id: summaryId || Date.now(),
+        kitchenId,
+        kitchenName: k?.name || `מטבח #${kitchenId}`,
+        supplierId: k?.supplierId || currentUser.supplierId || 1,
+        supplierName: currentUser.fullName,
+        periodYear: year,
+        periodMonth: month,
+        ramtalUserId: k?.defaultRamtalUserId || 2,
+        ramtalUserName: 'רפ"ק אבי כהן (רמת"ל)',
+        totalReportedRaw: totalRaw,
+        totalRamtalApproved: totalRaw,
+        calculatedNetMeals: totalRaw,
+        calculatedTotalAmountNis: 0,
+        calculationAudit: [],
+        status: 'submitted',
+        submittedAt: nowIso
+      };
+    }
+
+    setMonthlySummaries(prev => {
+      const idx = prev.findIndex(s => s.kitchenId === kitchenId || (summaryId && s.id === summaryId));
+      if (idx >= 0) {
+        const arr = [...prev];
+        arr[idx] = summaryToSave;
+        return arr;
       }
+      return [summaryToSave, ...prev];
     });
+
+    saveMonthlySummaryToFirestore(summaryToSave).catch(console.error);
   };
 
   const handleApproveSummary = async (summaryId: number) => {
@@ -492,34 +558,32 @@ export const App: React.FC = () => {
     }
 
     const targetSummary = monthlySummaries.find(s => s.id === summaryId);
+    if (!targetSummary) return;
 
-    setMonthlySummaries(prev => prev.map(s => {
-      if (s.id === summaryId) {
-        const k = kitchens.find(item => item.id === s.kitchenId);
-        const kReports = dailyReports.filter(r => r.kitchenId === s.kitchenId);
-        const kTariffs = mockTariffs.filter(t => t.kitchenId === s.kitchenId);
+    const k = kitchens.find(item => item.id === targetSummary.kitchenId);
+    const kReports = dailyReports.filter(r => r.kitchenId === targetSummary.kitchenId);
+    const kTariffs = mockTariffs.filter(t => t.kitchenId === targetSummary.kitchenId);
+    const calc = k ? MealCalculationEngine.calculateMonthlySummary(k, kReports, kTariffs) : null;
 
-        const calc = k ? MealCalculationEngine.calculateMonthlySummary(k, kReports, kTariffs) : null;
+    const updatedSummary: MonthlyKitchenSummary = {
+      ...targetSummary,
+      status: 'ramtal_approved',
+      ramtalApprovedAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
+      calculatedNetMeals: calc?.finalCalculatedMeals || targetSummary.totalRamtalApproved,
+      calculatedTotalAmountNis: calc?.finalTotalAmountNis || (targetSummary.totalRamtalApproved * 25)
+    };
 
-        return {
-          ...s,
-          status: 'ramtal_approved',
-          ramtalApprovedAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
-          calculatedNetMeals: calc?.finalCalculatedMeals || s.totalRamtalApproved,
-          calculatedTotalAmountNis: calc?.finalTotalAmountNis || (s.totalRamtalApproved * 25)
-        };
+    setMonthlySummaries(prev => prev.map(s => s.id === summaryId ? updatedSummary : s));
+    saveMonthlySummaryToFirestore(updatedSummary).catch(console.error);
+
+    setDailyReports(prev => prev.map(r => {
+      if (r.kitchenId === targetSummary.kitchenId) {
+        const updated = { ...r, status: 'ramtal_approved' as const };
+        saveDailyReportToFirestore(updated).catch(console.error);
+        return updated;
       }
-      return s;
+      return r;
     }));
-
-    if (targetSummary) {
-      setDailyReports(prev => prev.map(r => {
-        if (r.kitchenId === targetSummary.kitchenId) {
-          return { ...r, status: 'ramtal_approved' };
-        }
-        return r;
-      }));
-    }
   };
 
   const handleReturnSummary = async (summaryId: number, reason: string) => {
@@ -534,41 +598,54 @@ export const App: React.FC = () => {
     }
 
     const targetSummary = monthlySummaries.find(s => s.id === summaryId);
+    if (!targetSummary) return;
 
-    setMonthlySummaries(prev => prev.map(s => {
-      if (s.id === summaryId) {
-        return {
-          ...s,
-          status: 'returned_for_revision',
-          revisionReason: reason
-        };
+    const updatedSummary: MonthlyKitchenSummary = {
+      ...targetSummary,
+      status: 'returned_for_revision',
+      revisionReason: reason
+    };
+
+    setMonthlySummaries(prev => prev.map(s => s.id === summaryId ? updatedSummary : s));
+    saveMonthlySummaryToFirestore(updatedSummary).catch(console.error);
+
+    setDailyReports(prev => prev.map(r => {
+      if (r.kitchenId === targetSummary.kitchenId) {
+        const updated = { ...r, status: 'returned_for_revision' as const };
+        saveDailyReportToFirestore(updated).catch(console.error);
+        return updated;
       }
-      return s;
+      return r;
     }));
-
-    if (targetSummary) {
-      setDailyReports(prev => prev.map(r => {
-        if (r.kitchenId === targetSummary.kitchenId) {
-          return { ...r, status: 'returned_for_revision' };
-        }
-        return r;
-      }));
-    }
   };
 
   const handleApproveDailyRow = (rowId: number) => {
     setDailyReports(prev => {
-      const updated = prev.map(r => r.id === rowId ? { ...r, status: 'ramtal_approved' as const } : r);
+      const updated = prev.map(r => {
+        if (r.id === rowId) {
+          const u = { ...r, status: 'ramtal_approved' as const };
+          saveDailyReportToFirestore(u).catch(console.error);
+          return u;
+        }
+        return r;
+      });
       const targetRow = prev.find(r => r.id === rowId);
       if (targetRow) {
         const kitchenRows = updated.filter(r => r.kitchenId === targetRow.kitchenId);
         const allApproved = kitchenRows.length > 0 && kitchenRows.every(r => r.status === 'ramtal_approved' || r.status === 'food_dept_approved');
         if (allApproved) {
-          setMonthlySummaries(mPrev => mPrev.map(s => s.kitchenId === targetRow.kitchenId ? {
-            ...s,
-            status: 'ramtal_approved',
-            ramtalApprovedAt: new Date().toISOString().replace('T', ' ').substring(0, 16)
-          } : s));
+          setMonthlySummaries(mPrev => mPrev.map(s => {
+            if (s.kitchenId === targetRow.kitchenId) {
+              const uSum = {
+                ...s,
+                status: 'ramtal_approved' as const,
+                ramtalApprovedAt: new Date().toISOString().replace('T', ' ').substring(0, 16)
+              };
+              saveMonthlySummaryToFirestore(uSum).catch(console.error);
+              return uSum;
+            }
+            return s;
+          }));
         }
       }
       return updated;
@@ -577,18 +654,32 @@ export const App: React.FC = () => {
 
   const handleReturnDailyRow = (rowId: number, reason: string) => {
     setDailyReports(prev => {
-      const updated = prev.map(r => r.id === rowId ? {
-        ...r,
-        status: 'returned_for_revision' as const,
-        ramtalAdjustmentReason: reason
-      } : r);
+      const updated = prev.map(r => {
+        if (r.id === rowId) {
+          const u = {
+            ...r,
+            status: 'returned_for_revision' as const,
+            ramtalAdjustmentReason: reason
+          };
+          saveDailyReportToFirestore(u).catch(console.error);
+          return u;
+        }
+        return r;
+      });
       const targetRow = prev.find(r => r.id === rowId);
       if (targetRow) {
-        setMonthlySummaries(mPrev => mPrev.map(s => s.kitchenId === targetRow.kitchenId ? {
-          ...s,
-          status: 'returned_for_revision',
-          revisionReason: reason
-        } : s));
+        setMonthlySummaries(mPrev => mPrev.map(s => {
+          if (s.kitchenId === targetRow.kitchenId) {
+            const uSum = {
+              ...s,
+              status: 'returned_for_revision' as const,
+              revisionReason: reason
+            };
+            saveMonthlySummaryToFirestore(uSum).catch(console.error);
+            return uSum;
+          }
+          return s;
+        }));
       }
       return updated;
     });
@@ -608,12 +699,14 @@ export const App: React.FC = () => {
     setDailyReports(prev => {
       const updated = prev.map(r => {
         if (r.id === rowId) {
-          return {
+          const u = {
             ...r,
             ramtalAdjustedQty: newQty,
             ramtalAdjustmentReason: reason,
             status: 'ramtal_approved' as const
           };
+          saveDailyReportToFirestore(u).catch(console.error);
+          return u;
         }
         return r;
       });
@@ -621,7 +714,14 @@ export const App: React.FC = () => {
       if (targetRow) {
         const kitchenRows = updated.filter(r => r.kitchenId === targetRow.kitchenId);
         const totalApproved = kitchenRows.reduce((acc, curr) => acc + (curr.ramtalAdjustedQty !== undefined ? curr.ramtalAdjustedQty : curr.rawReportedQty || 0), 0);
-        setMonthlySummaries(mPrev => mPrev.map(s => s.kitchenId === targetRow.kitchenId ? { ...s, totalRamtalApproved: totalApproved } : s));
+        setMonthlySummaries(mPrev => mPrev.map(s => {
+          if (s.kitchenId === targetRow.kitchenId) {
+            const uSum = { ...s, totalRamtalApproved: totalApproved };
+            saveMonthlySummaryToFirestore(uSum).catch(console.error);
+            return uSum;
+          }
+          return s;
+        }));
       }
       return updated;
     });
@@ -640,11 +740,13 @@ export const App: React.FC = () => {
 
     setMonthlySummaries(prev => prev.map(s => {
       if (s.id === summaryId) {
-        return {
+        const uSum = {
           ...s,
-          status: 'food_dept_approved',
+          status: 'food_dept_approved' as const,
           foodDeptApprovedAt: new Date().toISOString().replace('T', ' ').substring(0, 16)
         };
+        saveMonthlySummaryToFirestore(uSum).catch(console.error);
+        return uSum;
       }
       return s;
     }));
@@ -667,6 +769,7 @@ export const App: React.FC = () => {
       } catch (err) {
         console.error(err);
       }
+      saveDisabledKitchensToFirestore(updated).catch(console.error);
       return updated;
     });
 
@@ -734,6 +837,7 @@ export const App: React.FC = () => {
   }) => {
     const todayStr = new Date().toISOString().split('T')[0];
     const currentMonthPrefix = todayStr.substring(0, 7);
+    const idsToDelete: number[] = [];
 
     setDailyReports(prev => {
       const filtered = prev.filter(row => {
@@ -742,6 +846,7 @@ export const App: React.FC = () => {
         if (!isKitchenInScope(row.kitchenId, scope, kitchenId, supplierId)) return true;
         if (filterType === 'today' && row.reportDate !== todayStr) return true;
         if (filterType === 'month' && !row.reportDate.startsWith(currentMonthPrefix)) return true;
+        idsToDelete.push(row.id);
         return false; // Delete matching draft
       });
       try {
@@ -751,6 +856,10 @@ export const App: React.FC = () => {
       }
       return filtered;
     });
+
+    if (idsToDelete.length > 0) {
+      batchDeleteReportsFromFirestore(idsToDelete).catch(console.error);
+    }
   };
 
   const handleAdminDeleteAllReports = ({
@@ -769,6 +878,7 @@ export const App: React.FC = () => {
 
     if (scope === 'all_kitchens' && filterType === 'all') {
       // 1. איפוס מוחלט (Master Reset) ל-0 שורות ו-0 סיכומים במערכת
+      const allReportIds = dailyReports.map(r => r.id);
       setDailyReports([]);
       setMonthlySummaries([]);
       try {
@@ -777,14 +887,19 @@ export const App: React.FC = () => {
       } catch (e) {
         console.error(e);
       }
+      if (allReportIds.length > 0) {
+        batchDeleteReportsFromFirestore(allReportIds).catch(console.error);
+      }
       return;
     }
 
+    const idsToDelete: number[] = [];
     setDailyReports(prev => {
       const filtered = prev.filter(row => {
         if (!isKitchenInScope(row.kitchenId, scope, kitchenId, supplierId)) return true;
         if (filterType === 'today' && row.reportDate !== todayStr) return true;
         if (filterType === 'month' && !row.reportDate.startsWith(currentMonthPrefix)) return true;
+        idsToDelete.push(row.id);
         return false; // Delete matching report
       });
       try {
@@ -794,6 +909,10 @@ export const App: React.FC = () => {
       }
       return filtered;
     });
+
+    if (idsToDelete.length > 0) {
+      batchDeleteReportsFromFirestore(idsToDelete).catch(console.error);
+    }
 
     // Reset summaries for matching kitchens
     setMonthlySummaries(prev => {

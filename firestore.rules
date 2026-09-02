@@ -1,0 +1,26 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Daily reports collection (124 stations)
+    match /daily_reports/{reportId} {
+      allow read, write: if true;
+    }
+
+    // Monthly summaries collection
+    match /monthly_summaries/{summaryId} {
+      allow read, write: if true;
+    }
+
+    // Application configuration and disabled kitchens
+    match /app_config/{configId} {
+      allow read, write: if true;
+    }
+
+    // Default fallback
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}
