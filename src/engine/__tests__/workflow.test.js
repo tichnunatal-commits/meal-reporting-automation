@@ -227,19 +227,37 @@ test('Admin Reset & Delete Scope Options (Current Kitchen, Supplier, All 124)', 
     { id: 3, kitchenId: 115, reportDate: '2026-08-01', status: 'draft' }
   ];
 
+  let summaries = [
+    { id: 10, kitchenId: 1, status: 'submitted' },
+    { id: 20, kitchenId: 2, status: 'submitted' },
+    { id: 30, kitchenId: 115, status: 'submitted' }
+  ];
+
   // 1. היקף מטבח נוכחי בלבד (בית שאן - ID 1)
-  let test1 = reports.filter(r => !isKitchenInScope(r.kitchenId, 'current_kitchen', 1, undefined));
-  assert.equal(test1.length, 2);
-  assert.equal(test1.some(r => r.kitchenId === 1), false);
+  let test1Reports = reports.filter(r => !isKitchenInScope(r.kitchenId, 'current_kitchen', 1, undefined));
+  let test1Summaries = summaries.filter(s => !isKitchenInScope(s.kitchenId, 'current_kitchen', 1, undefined));
+  assert.equal(test1Reports.length, 2);
+  assert.equal(test1Reports.some(r => r.kitchenId === 1), false);
+  assert.equal(test1Summaries.length, 2, 'Only kitchen 1 summary purged');
+  assert.equal(test1Summaries.some(s => s.kitchenId === 1), false);
 
   // 2. היקף כל מטבחי הספק הנוכחי (מבושלת - supplierId 2: כולל מטבח 1 ו-2)
-  let test2 = reports.filter(r => !isKitchenInScope(r.kitchenId, 'current_supplier', undefined, 2));
-  assert.equal(test2.length, 1);
-  assert.equal(test2[0].kitchenId, 115, 'Only supplier 1 kitchen remains');
+  let test2Reports = reports.filter(r => !isKitchenInScope(r.kitchenId, 'current_supplier', undefined, 2));
+  let test2Summaries = summaries.filter(s => !isKitchenInScope(s.kitchenId, 'current_supplier', undefined, 2));
+  assert.equal(test2Reports.length, 1);
+  assert.equal(test2Reports[0].kitchenId, 115, 'Only supplier 1 kitchen remains');
+  assert.equal(test2Summaries.length, 1, 'Only supplier 1 summaries remain');
+  assert.equal(test2Summaries[0].kitchenId, 115);
 
   // 3. היקף כל המטבחים (גלובלי)
-  let test3 = reports.filter(r => !isKitchenInScope(r.kitchenId, 'all_kitchens', undefined, undefined));
-  assert.equal(test3.length, 0, 'All reports cleared');
+  let test3Reports = reports.filter(r => !isKitchenInScope(r.kitchenId, 'all_kitchens', undefined, undefined));
+  let test3Summaries = summaries.filter(s => !isKitchenInScope(s.kitchenId, 'all_kitchens', undefined, undefined));
+  assert.equal(test3Reports.length, 0, 'All reports cleared');
+  assert.equal(test3Summaries.length, 0, 'All summaries purged on master reset');
+
+  // Verify App.tsx has batchDeleteMonthlySummariesFromFirestore
+  const appContent = fs.readFileSync(path.resolve('src/App.tsx'), 'utf-8');
+  assert.ok(appContent.includes('batchDeleteMonthlySummariesFromFirestore'), 'App.tsx must purge summaries in Firestore');
 });
 
 test('Station to Supplier Mapping Distribution (124 Stations)', async () => {

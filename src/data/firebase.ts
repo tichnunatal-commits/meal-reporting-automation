@@ -253,6 +253,26 @@ export async function batchDeleteReportsFromFirestore(reportIds: number[]): Prom
 }
 
 /**
+ * Batch delete monthly summaries matching a list of IDs
+ */
+export async function batchDeleteMonthlySummariesFromFirestore(summaryIds: number[]): Promise<void> {
+  if (summaryIds.length === 0) return;
+  const batch = writeBatch(db);
+  for (const id of summaryIds) {
+    batch.delete(doc(db, COLLECTIONS.MONTHLY_SUMMARIES, String(id)));
+  }
+  await batch.commit();
+}
+
+/**
+ * Delete a single monthly summary from Firestore
+ */
+export async function deleteMonthlySummaryFromFirestore(summaryId: number): Promise<void> {
+  const summaryRef = doc(db, COLLECTIONS.MONTHLY_SUMMARIES, String(summaryId));
+  await deleteDoc(summaryRef);
+}
+
+/**
  * Batch update report statuses
  */
 export async function batchUpdateReportsStatusInFirestore(
@@ -266,3 +286,4 @@ export async function batchUpdateReportsStatusInFirestore(
   }
   await batch.commit();
 }
+

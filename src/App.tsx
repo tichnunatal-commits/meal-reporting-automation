@@ -26,8 +26,10 @@ import {
   updateDailyReportInFirestore,
   deleteDailyReportFromFirestore,
   saveMonthlySummaryToFirestore,
+  deleteMonthlySummaryFromFirestore,
   saveDisabledKitchensToFirestore,
   batchDeleteReportsFromFirestore,
+  batchDeleteMonthlySummariesFromFirestore,
   batchUpdateReportsStatusInFirestore
 } from './data/firebase';
 import { getAllowedTabs } from './utils/permissions';
@@ -939,37 +941,22 @@ export const App: React.FC = () => {
     const currentMonthPrefix = todayStr.substring(0, 7);
 
     if (scope === 'all_kitchens' && filterType === 'all') {
-      // 1. איפוס מוחלט (Master Reset) ל-0 שורות ואיפוס כל הסיכומים ל-draft
+      // 1. איפוס מוחלט (Master Reset) - מחיקת כל הדיווחים ומחיקת כל מסמכי הסיכום החודשי ב-Firestore
       const allReportIds = dailyReports.map(r => r.id);
+      const allSummaryIds = monthlySummaries.map(s => s.id);
       setDailyReports([]);
-      setMonthlySummaries(prev => {
-        const wiped = prev.map(s => {
-          const resetSummary: MonthlyKitchenSummary = {
-            ...s,
-            status: 'draft',
-            totalReportedRaw: 0,
-            totalRamtalApproved: 0,
-            calculatedNetMeals: 0,
-            calculatedTotalAmountNis: 0,
-            revisionReason: undefined
-          };
-          saveMonthlySummaryToFirestore(resetSummary).catch(console.error);
-          return resetSummary;
-        });
-        try {
-          localStorage.setItem(SUMMARIES_STORAGE_KEY, JSON.stringify(wiped));
-        } catch (e) {
-          console.error(e);
-        }
-        return wiped;
-      });
+      setMonthlySummaries([]);
       try {
         localStorage.setItem(REPORTS_STORAGE_KEY, JSON.stringify([]));
+        localStorage.setItem(SUMMARIES_STORAGE_KEY, JSON.stringify([]));
       } catch (e) {
         console.error(e);
       }
       if (allReportIds.length > 0) {
         batchDeleteReportsFromFirestore(allReportIds).catch(console.error);
+      }
+      if (allSummaryIds.length > 0) {
+        batchDeleteMonthlySummariesFromFirestore(allSummaryIds).catch(console.error);
       }
       return;
     }
@@ -995,23 +982,15 @@ export const App: React.FC = () => {
       batchDeleteReportsFromFirestore(idsToDelete).catch(console.error);
     }
 
-    // Reset and heal summaries for matching kitchens in scope
+    // מחיקת מסמכי הסיכום החודשי ב-Firestore עבור המטבחים שבהיקף האיפוס בלבד
+    const summaryIdsToDelete: number[] = [];
     setMonthlySummaries(prev => {
-      const updated = prev.map(s => {
+      const updated = prev.filter(s => {
         if (isKitchenInScope(s.kitchenId, scope, kitchenId, supplierId)) {
-          const resetSummary: MonthlyKitchenSummary = {
-            ...s,
-            status: 'draft',
-            totalReportedRaw: 0,
-            totalRamtalApproved: 0,
-            calculatedNetMeals: 0,
-            calculatedTotalAmountNis: 0,
-            revisionReason: undefined
-          };
-          saveMonthlySummaryToFirestore(resetSummary).catch(console.error);
-          return resetSummary;
+          summaryIdsToDelete.push(s.id);
+          return false; // Purge summary from state
         }
-        return s;
+        return true;
       });
       try {
         localStorage.setItem(SUMMARIES_STORAGE_KEY, JSON.stringify(updated));
@@ -1020,6 +999,10 @@ export const App: React.FC = () => {
       }
       return updated;
     });
+
+    if (summaryIdsToDelete.length > 0) {
+      batchDeleteMonthlySummariesFromFirestore(summaryIdsToDelete).catch(console.error);
+    }
   };
 
   if (!isAuthenticated) {
