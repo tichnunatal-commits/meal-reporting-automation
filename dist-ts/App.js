@@ -6,35 +6,159 @@ import { RamtalView } from './components/RamtalView';
 import { FoodDeptView } from './components/FoodDeptView';
 import { AdminView } from './components/AdminView';
 import { ClockReconciliationView } from './components/ClockReconciliationView';
+import { PasswordGate } from './components/PasswordGate';
 import { mockUsers, mockSuppliers, mockKitchens, mockMealTypes, mockTariffs, initialDailyReports, initialMonthlySummaries } from './data/mockData';
 import { MealCalculationEngine } from './engine/calculator';
-import { FileEdit, CheckCircle2, BarChart3, Settings, Clock } from 'lucide-react';
+import { FileEdit, CheckCircle2, BarChart3, Settings, Clock, UserCheck, X } from 'lucide-react';
 const API_BASE = 'http://127.0.0.1:3001/api';
+export const getAllowedTabsForRole = (role) => {
+    switch (role) {
+        case 'supplier_reporter':
+            return ['supplier'];
+        case 'police_ramtal':
+            return ['ramtal'];
+        case 'food_dept_reviewer':
+            return ['ramtal', 'food_dept', 'clock_sync'];
+        case 'viewer_finance':
+            return ['food_dept', 'clock_sync'];
+        case 'system_admin':
+        default:
+            return ['supplier', 'ramtal', 'food_dept', 'clock_sync', 'admin'];
+    }
+};
+const AUTH_STORAGE_KEY = 'police_meal_auth_session_v3';
+const REPORTS_STORAGE_KEY = 'police_daily_reports_v3';
+const SUMMARIES_STORAGE_KEY = 'police_monthly_summaries_v3';
+const DISABLED_KITCHENS_STORAGE_KEY = 'police_disabled_kitchens_v1';
 export const App = () => {
-    const [currentUser, setCurrentUser] = useState(mockUsers[0]);
-    const [kitchens, setKitchens] = useState(mockKitchens);
-    const [dailyReports, setDailyReports] = useState(initialDailyReports);
-    const [monthlySummaries, setMonthlySummaries] = useState(initialMonthlySummaries);
+    const [authSession, setAuthSession] = useState(() => {
+        try {
+            const saved = localStorage.getItem(AUTH_STORAGE_KEY);
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                const user = mockUsers.find(u => u.id === parsed.userId);
+                if (user) {
+                    return { isAuthenticated: true, currentUser: user, isSuperAdmin: !!parsed.isSuperAdmin };
+                }
+            }
+        }
+        catch (err) {
+            console.error('Failed to parse saved auth session:', err);
+        }
+        return { isAuthenticated: false, currentUser: mockUsers[0], isSuperAdmin: false };
+    });
+    const { isAuthenticated, currentUser, isSuperAdmin } = authSession;
+    const [disabledKitchens, setDisabledKitchens] = useState(() => {
+        try {
+            const saved = localStorage.getItem(DISABLED_KITCHENS_STORAGE_KEY);
+            if (saved !== null) {
+                const parsed = JSON.parse(saved);
+                if (Array.isArray(parsed))
+                    return parsed;
+            }
+        }
+        catch (e) {
+            console.error('Failed to load disabled kitchens from localStorage:', e);
+        }
+        return [];
+    });
+    const [kitchens, setKitchens] = useState(() => {
+        let savedDisabled = [];
+        try {
+            const saved = localStorage.getItem(DISABLED_KITCHENS_STORAGE_KEY);
+            if (saved !== null) {
+                const parsed = JSON.parse(saved);
+                if (Array.isArray(parsed))
+                    savedDisabled = parsed;
+            }
+        }
+        catch (e) {
+            console.error(e);
+        }
+        return mockKitchens.map(k => ({
+            ...k,
+            isActive: savedDisabled.includes(k.id) ? false : k.isActive
+        }));
+    });
+    const [tariffs, setTariffs] = useState(mockTariffs);
+    // 2. שמירת נתונים קבועה בדפדפן (LocalStorage Persistence)
+    const [dailyReports, setDailyReports] = useState(() => {
+        try {
+            const saved = localStorage.getItem(REPORTS_STORAGE_KEY);
+            if (saved !== null) {
+                const parsed = JSON.parse(saved);
+                if (Array.isArray(parsed))
+                    return parsed;
+            }
+        }
+        catch (e) {
+            console.error('Failed to load daily reports from localStorage:', e);
+        }
+        return initialDailyReports;
+    });
+    const [monthlySummaries, setMonthlySummaries] = useState(() => {
+        try {
+            const saved = localStorage.getItem(SUMMARIES_STORAGE_KEY);
+            if (saved !== null) {
+                const parsed = JSON.parse(saved);
+                if (Array.isArray(parsed))
+                    return parsed;
+            }
+        }
+        catch (e) {
+            console.error('Failed to load monthly summaries from localStorage:', e);
+        }
+        return initialMonthlySummaries;
+    });
     const [activeTab, setActiveTab] = useState('supplier');
-    // Load data from Backend API on mount
+    // שמירה אוטומטית ל-localStorage בכל שינוי
+    useEffect(() => {
+        try {
+            localStorage.setItem(DISABLED_KITCHENS_STORAGE_KEY, JSON.stringify(disabledKitchens));
+        }
+        catch (e) {
+            console.error('Failed to persist disabled kitchens to localStorage:', e);
+        }
+    }, [disabledKitchens]);
+    // שמירה אוטומטית ל-localStorage בכל שינוי
+    useEffect(() => {
+        try {
+            localStorage.setItem(REPORTS_STORAGE_KEY, JSON.stringify(dailyReports));
+        }
+        catch (e) {
+            console.error('Failed to persist daily reports to localStorage:', e);
+        }
+    }, [dailyReports]);
+    useEffect(() => {
+        try {
+            localStorage.setItem(SUMMARIES_STORAGE_KEY, JSON.stringify(monthlySummaries));
+        }
+        catch (e) {
+            console.error('Failed to persist monthly summaries to localStorage:', e);
+        }
+    }, [monthlySummaries]);
+    const allowedTabs = getAllowedTabsForRole(currentUser.role);
+    // טעינה מיידית של נתוני 134 התחנות והתעריפים מהשרת
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const [resKitchens, resSummaries, resDaily] = await Promise.all([
+                const [resKitchens, resSummaries, resDaily, resTariffs] = await Promise.all([
                     fetch(`${API_BASE}/kitchens`),
                     fetch(`${API_BASE}/reports/monthly`),
-                    fetch(`${API_BASE}/reports/daily`)
+                    fetch(`${API_BASE}/reports/daily`),
+                    fetch(`${API_BASE}/tariffs`)
                 ]);
                 if (resKitchens.ok) {
                     const kData = await resKitchens.json();
-                    if (kData.length > 0) {
-                        setKitchens(kData.map((k) => ({
+                    if (Array.isArray(kData) && kData.length > 0) {
+                        const mapped = kData.map((k) => ({
                             id: k.id,
                             kitchenCode: k.kitchen_code,
                             name: k.name,
-                            supplierId: k.supplier_id,
+                            supplierId: 1,
                             defaultRamtalUserId: k.default_ramtal_user_id,
-                            region: k.region,
+                            region: k.region || '',
+                            cluster: k.cluster_name || k.cluster || '',
                             isActive: k.is_active === 1,
                             activeStartDate: k.active_start_date,
                             effectiveEndDate: k.effective_end_date,
@@ -42,41 +166,87 @@ export const App = () => {
                             quarterlyMinimumMeals: k.quarterly_minimum_meals,
                             appliesR1Machmesh: k.applies_r1_machmesh === 1,
                             appliesR2Tzohar: k.applies_r2_tzohar === 1
-                        })));
+                        }));
+                        mapped.sort((a, b) => {
+                            const compCluster = (a.cluster || a.region || '').localeCompare(b.cluster || b.region || '', 'he');
+                            if (compCluster !== 0)
+                                return compCluster;
+                            return a.name.localeCompare(b.name, 'he');
+                        });
+                        setKitchens(mapped);
                     }
                 }
                 if (resSummaries.ok) {
                     const sData = await resSummaries.json();
-                    if (sData.length > 0)
+                    if (Array.isArray(sData) && sData.length > 0)
                         setMonthlySummaries(sData);
                 }
                 if (resDaily.ok) {
                     const dData = await resDaily.json();
-                    if (dData.length > 0)
+                    if (Array.isArray(dData) && dData.length > 0)
                         setDailyReports(dData);
+                }
+                if (resTariffs.ok) {
+                    const tData = await resTariffs.json();
+                    if (Array.isArray(tData) && tData.length > 0) {
+                        setTariffs(tData.map((t) => ({
+                            id: t.id,
+                            kitchenId: t.kitchen_id,
+                            kitchenName: t.kitchen_name,
+                            kitchenCode: t.kitchen_code,
+                            clusterName: t.cluster_name,
+                            region: t.region,
+                            mealTypeId: t.meal_type_id,
+                            mealTypeName: t.meal_type_name,
+                            priceNis: t.price_nis,
+                            effectiveFrom: '2026-06-01',
+                            isActive: t.is_active === 1
+                        })));
+                    }
                 }
             }
             catch (err) {
-                console.log('Using local fallback state:', err);
+                console.log('Backend fetch warning, preserving active state:', err);
             }
         };
         fetchData();
-    }, []);
-    // שינוי תפקיד אוטומטי לפי המשתמש שנבחר ב-Header
-    const handleSelectUser = (user) => {
-        setCurrentUser(user);
-        if (user.role === 'supplier_reporter')
-            setActiveTab('supplier');
-        else if (user.role === 'police_ramtal')
-            setActiveTab('ramtal');
-        else if (user.role === 'food_dept_reviewer')
-            setActiveTab('food_dept');
-        else if (user.role === 'viewer_finance')
-            setActiveTab('clock_sync');
-        else if (user.role === 'system_admin')
-            setActiveTab('admin');
+    }, [isAuthenticated]);
+    const [welcomeBanner, setWelcomeBanner] = useState(null);
+    // אכיפת הרשאות RBAC: העברה אוטומטית לטאב המורשה הראשון אם הטאב הנוכחי אינו מורשה
+    useEffect(() => {
+        if (isAuthenticated && !allowedTabs.includes(activeTab)) {
+            if (allowedTabs.length > 0) {
+                setActiveTab(allowedTabs[0]);
+            }
+        }
+    }, [currentUser.role, activeTab, isAuthenticated]);
+    const handleLoginSuccess = (user, superAdminFlag) => {
+        setAuthSession({ isAuthenticated: true, currentUser: user, isSuperAdmin: superAdminFlag });
+        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ userId: user.id, isSuperAdmin: superAdminFlag }));
+        const allowed = getAllowedTabsForRole(user.role);
+        if (allowed.length > 0) {
+            setActiveTab(allowed[0]);
+        }
+        // Clean user full name for greeting (e.g. 'דוד מלכה' out of 'דוד מלכה (נציג ספק הסעדה)')
+        const cleanName = user.fullName.split(' (')[0];
+        setWelcomeBanner(`ברוך הבא, ${cleanName}!`);
+        setTimeout(() => setWelcomeBanner(null), 6000);
     };
-    // הוספת שורת דיווח יומית
+    const handleLogout = () => {
+        localStorage.removeItem(AUTH_STORAGE_KEY);
+        sessionStorage.removeItem('police_meal_gate_session_v2');
+        setAuthSession({ isAuthenticated: false, currentUser: mockUsers[0], isSuperAdmin: false });
+    };
+    const handleSelectUser = (user) => {
+        setAuthSession(prev => ({ ...prev, currentUser: user }));
+        if (isSuperAdmin) {
+            localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ userId: user.id, isSuperAdmin: true }));
+        }
+        const userAllowed = getAllowedTabsForRole(user.role);
+        if (userAllowed.length > 0) {
+            setActiveTab(userAllowed[0]);
+        }
+    };
     const handleAddDailyReport = async (newRow) => {
         try {
             await fetch(`${API_BASE}/reports/daily`, {
@@ -105,30 +275,155 @@ export const App = () => {
             return s;
         }));
     };
-    // הגשת חודש לאישור רמת"ל
-    const handleSubmitMonth = async (summaryId) => {
+    const handleUpdateDailyReport = (updatedRow) => {
+        // 4. כאשר ספק עורך ושומר שורה בסטטוס נדרש תיקון, עדכן אך ורק אותה לסטטוס ממתין לאישור רמת"ל
+        const finalRow = updatedRow.status === 'returned_for_revision'
+            ? { ...updatedRow, status: 'submitted' }
+            : updatedRow;
+        setDailyReports(prev => prev.map(r => r.id === finalRow.id ? finalRow : r));
+        setMonthlySummaries(prev => prev.map(s => {
+            if (s.kitchenId === finalRow.kitchenId) {
+                const kitchenRows = dailyReports.map(r => r.id === finalRow.id ? finalRow : r).filter(r => r.kitchenId === finalRow.kitchenId);
+                const sum = kitchenRows.reduce((acc, curr) => acc + (curr.rawReportedQty || 0), 0);
+                return { ...s, totalReportedRaw: sum, totalRamtalApproved: sum };
+            }
+            return s;
+        }));
+    };
+    const handleDuplicateDailyReport = (rowId) => {
+        const target = dailyReports.find(r => r.id === rowId);
+        if (!target)
+            return;
+        const duplicated = {
+            ...target,
+            id: Date.now(),
+            reportDate: new Date().toISOString().split('T')[0],
+            notes: target.notes ? `${target.notes} (משוכפל)` : 'משוכפל'
+        };
+        setDailyReports(prev => [duplicated, ...prev]);
+        setMonthlySummaries(prev => prev.map(s => {
+            if (s.kitchenId === target.kitchenId) {
+                const sum = s.totalReportedRaw + duplicated.rawReportedQty;
+                return { ...s, totalReportedRaw: sum, totalRamtalApproved: sum };
+            }
+            return s;
+        }));
+    };
+    const handleDeleteDailyReport = (rowId) => {
+        const target = dailyReports.find(r => r.id === rowId);
+        if (!target)
+            return;
+        const isRevision = target.status === 'returned_for_revision' || target.status === 'rejected';
+        if (isRevision) {
+            // 1. תיעוד מחיקת שורות שהוחזרו לתיקון (Audit Trail במסך הרמת"ל)
+            // במסך הספק: השורה מוסרת (סטטוס deleted_by_supplier)
+            // במסך הרמת"ל: השורה נשמרת בסטטוס deleted_by_supplier כ-Audit Log
+            setDailyReports(prev => prev.map(r => r.id === rowId ? { ...r, status: 'deleted_by_supplier' } : r));
+        }
+        else {
+            // טיוטה רגילה של ספק נמחקת לחלוטין
+            setDailyReports(prev => prev.filter(r => r.id !== rowId));
+        }
+        setMonthlySummaries(prev => prev.map(s => {
+            if (s.kitchenId === target.kitchenId) {
+                const sum = Math.max(0, s.totalReportedRaw - target.rawReportedQty);
+                return { ...s, totalReportedRaw: sum, totalRamtalApproved: sum };
+            }
+            return s;
+        }));
+    };
+    // 1. תיקון זיהוי תאריכים ושינוי סטטוס בהגשה לרמת"ל (Date Parsing הרמטי)
+    const isRowInTargetPeriod = (reportDate, targetMonth, targetYear) => {
+        if (!reportDate)
+            return true;
+        const str = String(reportDate).trim();
+        // 1. בדיקת פורמט YYYY-MM-DD או YYYY/MM/DD
+        const isoMatch = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+        if (isoMatch) {
+            const y = parseInt(isoMatch[1], 10);
+            const m = parseInt(isoMatch[2], 10);
+            return y === targetYear && m === targetMonth;
+        }
+        // 2. בדיקת פורמט ישראלי DD/MM/YYYY או DD-MM-YYYY
+        const hebrewMatch = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+        if (hebrewMatch) {
+            const m = parseInt(hebrewMatch[2], 10);
+            const y = parseInt(hebrewMatch[3], 10);
+            return y === targetYear && m === targetMonth;
+        }
+        // 3. Fallback: Parse via Date
+        const d = new Date(str);
+        if (!isNaN(d.getTime())) {
+            return d.getFullYear() === targetYear && (d.getMonth() + 1) === targetMonth;
+        }
+        return true;
+    };
+    const handleSubmitMonth = async ({ kitchenId, month, year, summaryId }) => {
+        const nowIso = new Date().toISOString().replace('T', ' ').substring(0, 16);
         try {
             await fetch(`${API_BASE}/reports/submit-month`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ summaryId })
+                body: JSON.stringify({ kitchenId, month, year, summaryId })
             });
         }
         catch (e) {
             console.error(e);
         }
-        setMonthlySummaries(prev => prev.map(s => {
-            if (s.id === summaryId) {
-                return {
+        // 1. חוק ברזל: עדכון ל-submitted אך ורק עבור שורות בסטטוס draft!
+        // אסור לשנות או לגעת בשורות שנמצאות בסטטוס rejected (נדרש תיקון) או approved / ramtal_approved!
+        setDailyReports(prev => prev.map(r => {
+            if (r.kitchenId === kitchenId) {
+                const isDraft = (r.status || 'draft') === 'draft';
+                if (isDraft && isRowInTargetPeriod(r.reportDate, month, year)) {
+                    return { ...r, status: 'submitted' };
+                }
+            }
+            return r;
+        }));
+        // 2. עדכון / יצירת סיכום חודשי עבור המטבח
+        setMonthlySummaries(prev => {
+            const existingIdx = prev.findIndex(s => s.kitchenId === kitchenId || (summaryId && s.id === summaryId));
+            const kitchenReports = dailyReports.filter(r => r.kitchenId === kitchenId);
+            const totalRaw = kitchenReports.reduce((acc, curr) => acc + (curr.rawReportedQty || 0), 0);
+            if (existingIdx >= 0) {
+                const updated = [...prev];
+                const s = updated[existingIdx];
+                updated[existingIdx] = {
                     ...s,
                     status: 'submitted',
-                    submittedAt: new Date().toISOString().replace('T', ' ').substring(0, 16)
+                    submittedAt: nowIso,
+                    periodYear: year,
+                    periodMonth: month,
+                    totalReportedRaw: totalRaw > 0 ? totalRaw : s.totalReportedRaw,
+                    totalRamtalApproved: totalRaw > 0 ? totalRaw : s.totalRamtalApproved
                 };
+                return updated;
             }
-            return s;
-        }));
+            else {
+                const k = kitchens.find(k => k.id === kitchenId);
+                const newSummary = {
+                    id: summaryId || Date.now(),
+                    kitchenId,
+                    kitchenName: k?.name || `מטבח #${kitchenId}`,
+                    supplierId: k?.supplierId || currentUser.supplierId || 1,
+                    supplierName: currentUser.fullName,
+                    periodYear: year,
+                    periodMonth: month,
+                    ramtalUserId: k?.defaultRamtalUserId || 2,
+                    ramtalUserName: 'רפ"ק אבי כהן (רמת"ל)',
+                    totalReportedRaw: totalRaw,
+                    totalRamtalApproved: totalRaw,
+                    calculatedNetMeals: totalRaw,
+                    calculatedTotalAmountNis: 0,
+                    calculationAudit: [],
+                    status: 'submitted',
+                    submittedAt: nowIso
+                };
+                return [newSummary, ...prev];
+            }
+        });
     };
-    // אישור חודש ע"י רמת"ל
     const handleApproveSummary = async (summaryId) => {
         try {
             await fetch(`${API_BASE}/reports/ramtal-approve`, {
@@ -140,6 +435,7 @@ export const App = () => {
         catch (e) {
             console.error(e);
         }
+        const targetSummary = monthlySummaries.find(s => s.id === summaryId);
         setMonthlySummaries(prev => prev.map(s => {
             if (s.id === summaryId) {
                 const k = kitchens.find(item => item.id === s.kitchenId);
@@ -156,8 +452,15 @@ export const App = () => {
             }
             return s;
         }));
+        if (targetSummary) {
+            setDailyReports(prev => prev.map(r => {
+                if (r.kitchenId === targetSummary.kitchenId) {
+                    return { ...r, status: 'ramtal_approved' };
+                }
+                return r;
+            }));
+        }
     };
-    // החזרת חודש לעריכת הספק
     const handleReturnSummary = async (summaryId, reason) => {
         try {
             await fetch(`${API_BASE}/reports/ramtal-return`, {
@@ -169,6 +472,7 @@ export const App = () => {
         catch (e) {
             console.error(e);
         }
+        const targetSummary = monthlySummaries.find(s => s.id === summaryId);
         setMonthlySummaries(prev => prev.map(s => {
             if (s.id === summaryId) {
                 return {
@@ -179,8 +483,51 @@ export const App = () => {
             }
             return s;
         }));
+        if (targetSummary) {
+            setDailyReports(prev => prev.map(r => {
+                if (r.kitchenId === targetSummary.kitchenId) {
+                    return { ...r, status: 'returned_for_revision' };
+                }
+                return r;
+            }));
+        }
     };
-    // עריכת כמות נקודתית בשורה ע"י רמת"ל
+    const handleApproveDailyRow = (rowId) => {
+        setDailyReports(prev => {
+            const updated = prev.map(r => r.id === rowId ? { ...r, status: 'ramtal_approved' } : r);
+            const targetRow = prev.find(r => r.id === rowId);
+            if (targetRow) {
+                const kitchenRows = updated.filter(r => r.kitchenId === targetRow.kitchenId);
+                const allApproved = kitchenRows.length > 0 && kitchenRows.every(r => r.status === 'ramtal_approved' || r.status === 'food_dept_approved');
+                if (allApproved) {
+                    setMonthlySummaries(mPrev => mPrev.map(s => s.kitchenId === targetRow.kitchenId ? {
+                        ...s,
+                        status: 'ramtal_approved',
+                        ramtalApprovedAt: new Date().toISOString().replace('T', ' ').substring(0, 16)
+                    } : s));
+                }
+            }
+            return updated;
+        });
+    };
+    const handleReturnDailyRow = (rowId, reason) => {
+        setDailyReports(prev => {
+            const updated = prev.map(r => r.id === rowId ? {
+                ...r,
+                status: 'returned_for_revision',
+                ramtalAdjustmentReason: reason
+            } : r);
+            const targetRow = prev.find(r => r.id === rowId);
+            if (targetRow) {
+                setMonthlySummaries(mPrev => mPrev.map(s => s.kitchenId === targetRow.kitchenId ? {
+                    ...s,
+                    status: 'returned_for_revision',
+                    revisionReason: reason
+                } : s));
+            }
+            return updated;
+        });
+    };
     const handleAdjustDailyRow = async (rowId, newQty, reason) => {
         try {
             await fetch(`${API_BASE}/reports/ramtal-adjust-row`, {
@@ -192,18 +539,27 @@ export const App = () => {
         catch (e) {
             console.error(e);
         }
-        setDailyReports(prev => prev.map(r => {
-            if (r.id === rowId) {
-                return {
-                    ...r,
-                    ramtalAdjustedQty: newQty,
-                    ramtalAdjustmentReason: reason
-                };
+        setDailyReports(prev => {
+            const updated = prev.map(r => {
+                if (r.id === rowId) {
+                    return {
+                        ...r,
+                        ramtalAdjustedQty: newQty,
+                        ramtalAdjustmentReason: reason,
+                        status: 'ramtal_approved'
+                    };
+                }
+                return r;
+            });
+            const targetRow = prev.find(r => r.id === rowId);
+            if (targetRow) {
+                const kitchenRows = updated.filter(r => r.kitchenId === targetRow.kitchenId);
+                const totalApproved = kitchenRows.reduce((acc, curr) => acc + (curr.ramtalAdjustedQty !== undefined ? curr.ramtalAdjustedQty : curr.rawReportedQty || 0), 0);
+                setMonthlySummaries(mPrev => mPrev.map(s => s.kitchenId === targetRow.kitchenId ? { ...s, totalRamtalApproved: totalApproved } : s));
             }
-            return r;
-        }));
+            return updated;
+        });
     };
-    // אישור סופי ע"י מדור מזון
     const handleFinalApproveSummary = async (summaryId) => {
         try {
             await fetch(`${API_BASE}/reports/food-dept-approve`, {
@@ -226,7 +582,6 @@ export const App = () => {
             return s;
         }));
     };
-    // השבתת / הפעלת מטבח (DR-02 / DR-04)
     const handleToggleKitchenActive = async (kitchenId) => {
         try {
             await fetch(`${API_BASE}/kitchens/${kitchenId}/toggle-active`, { method: 'POST' });
@@ -234,6 +589,19 @@ export const App = () => {
         catch (e) {
             console.error(e);
         }
+        setDisabledKitchens(prev => {
+            const isCurrentlyDisabled = prev.includes(kitchenId);
+            const updated = isCurrentlyDisabled
+                ? prev.filter(id => id !== kitchenId)
+                : [...prev, kitchenId];
+            try {
+                localStorage.setItem(DISABLED_KITCHENS_STORAGE_KEY, JSON.stringify(updated));
+            }
+            catch (err) {
+                console.error(err);
+            }
+            return updated;
+        });
         setKitchens(prev => prev.map(k => {
             if (k.id === kitchenId) {
                 return { ...k, isActive: !k.isActive };
@@ -241,15 +609,140 @@ export const App = () => {
             return k;
         }));
     };
-    return (_jsxs("div", { className: "min-h-screen bg-slate-100 flex flex-col font-heebo", children: [_jsx(Header, { currentUser: currentUser, onSelectUser: handleSelectUser, selectedPeriod: { month: 8, year: 2026 } }), _jsx("nav", { className: "bg-white border-b border-slate-200 sticky top-16 z-40 shadow-xs", children: _jsx("div", { className: "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8", children: _jsxs("div", { className: "flex items-center justify-between h-12", children: [_jsxs("div", { className: "flex items-center space-x-1 space-x-reverse overflow-x-auto", children: [_jsxs("button", { onClick: () => setActiveTab('supplier'), className: `flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition ${activeTab === 'supplier'
+    const handleUpdateTariff = async (tariffId, newPriceNis) => {
+        try {
+            await fetch(`${API_BASE}/tariffs/${tariffId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ priceNis: newPriceNis })
+            });
+        }
+        catch (e) {
+            console.error('API update tariff error, updating local state:', e);
+        }
+        setTariffs(prev => prev.map(t => t.id === tariffId ? { ...t, priceNis: newPriceNis } : t));
+    };
+    const handleUpdateGlobalTariff = async (mealTypeId, newPriceNis) => {
+        try {
+            await fetch(`${API_BASE}/global-tariffs/${mealTypeId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ priceNis: newPriceNis })
+            });
+        }
+        catch (e) {
+            console.error('API update global tariff error, updating local state:', e);
+        }
+        setTariffs(prev => prev.map(t => t.mealTypeId === mealTypeId ? { ...t, priceNis: newPriceNis } : t));
+    };
+    const handleLockSystem = () => {
+        handleLogout();
+    };
+    // 4. פעולות איפוס ומחיקה של מנהל מערכת בלבד (Admin / zeev) - 3 היקפי פעולה מוגדרים
+    const isKitchenInScope = (kId, scope, targetKitchenId, targetSupplierId) => {
+        if (scope === 'all_kitchens')
+            return true;
+        if (scope === 'current_kitchen')
+            return targetKitchenId !== undefined && kId === targetKitchenId;
+        if (scope === 'current_supplier') {
+            const k = kitchens.find(item => item.id === kId);
+            return k?.supplierId === targetSupplierId;
+        }
+        return true;
+    };
+    const handleAdminResetDrafts = ({ scope = 'all_kitchens', kitchenId, supplierId, filterType }) => {
+        const todayStr = new Date().toISOString().split('T')[0];
+        const currentMonthPrefix = todayStr.substring(0, 7);
+        setDailyReports(prev => {
+            const filtered = prev.filter(row => {
+                const isDraft = (row.status || 'draft') === 'draft';
+                if (!isDraft)
+                    return true; // Keep submitted / approved rows
+                if (!isKitchenInScope(row.kitchenId, scope, kitchenId, supplierId))
+                    return true;
+                if (filterType === 'today' && row.reportDate !== todayStr)
+                    return true;
+                if (filterType === 'month' && !row.reportDate.startsWith(currentMonthPrefix))
+                    return true;
+                return false; // Delete matching draft
+            });
+            try {
+                localStorage.setItem(REPORTS_STORAGE_KEY, JSON.stringify(filtered));
+            }
+            catch (e) {
+                console.error(e);
+            }
+            return filtered;
+        });
+    };
+    const handleAdminDeleteAllReports = ({ scope = 'all_kitchens', kitchenId, supplierId, filterType }) => {
+        const todayStr = new Date().toISOString().split('T')[0];
+        const currentMonthPrefix = todayStr.substring(0, 7);
+        if (scope === 'all_kitchens' && filterType === 'all') {
+            // 1. איפוס מוחלט (Master Reset) ל-0 שורות ו-0 סיכומים במערכת
+            setDailyReports([]);
+            setMonthlySummaries([]);
+            try {
+                localStorage.setItem(REPORTS_STORAGE_KEY, JSON.stringify([]));
+                localStorage.setItem(SUMMARIES_STORAGE_KEY, JSON.stringify([]));
+            }
+            catch (e) {
+                console.error(e);
+            }
+            return;
+        }
+        setDailyReports(prev => {
+            const filtered = prev.filter(row => {
+                if (!isKitchenInScope(row.kitchenId, scope, kitchenId, supplierId))
+                    return true;
+                if (filterType === 'today' && row.reportDate !== todayStr)
+                    return true;
+                if (filterType === 'month' && !row.reportDate.startsWith(currentMonthPrefix))
+                    return true;
+                return false; // Delete matching report
+            });
+            try {
+                localStorage.setItem(REPORTS_STORAGE_KEY, JSON.stringify(filtered));
+            }
+            catch (e) {
+                console.error(e);
+            }
+            return filtered;
+        });
+        // Reset summaries for matching kitchens
+        setMonthlySummaries(prev => {
+            const updated = prev.filter(s => {
+                if (isKitchenInScope(s.kitchenId, scope, kitchenId, supplierId)) {
+                    if (filterType === 'all')
+                        return false; // wipe summary for scope
+                }
+                return true;
+            });
+            try {
+                localStorage.setItem(SUMMARIES_STORAGE_KEY, JSON.stringify(updated));
+            }
+            catch (e) {
+                console.error(e);
+            }
+            return updated;
+        });
+    };
+    if (!isAuthenticated) {
+        return _jsx(PasswordGate, { onSuccess: handleLoginSuccess });
+    }
+    return (_jsxs("div", { className: "min-h-screen bg-slate-100 flex flex-col font-heebo", dir: "rtl", children: [_jsx(Header, { currentUser: currentUser, onSelectUser: handleSelectUser, selectedPeriod: {
+                    month: new Date().getMonth() + 1,
+                    year: new Date().getFullYear()
+                }, onLockSystem: handleLogout, onLogout: handleLogout, isSuperAdmin: isSuperAdmin }), (isSuperAdmin || allowedTabs.length > 1) && (_jsx("nav", { className: "bg-white border-b border-slate-200 sticky top-16 z-40 shadow-xs", children: _jsx("div", { className: "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8", children: _jsxs("div", { className: "flex items-center justify-between h-12", children: [_jsxs("div", { className: "flex items-center space-x-1 space-x-reverse overflow-x-auto", children: [allowedTabs.includes('supplier') && (_jsxs("button", { onClick: () => setActiveTab('supplier'), className: `flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${activeTab === 'supplier'
                                             ? 'bg-blue-600 text-white shadow-xs'
-                                            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'}`, children: [_jsx(FileEdit, { className: "w-4 h-4" }), _jsx("span", { children: "1. \u05D3\u05D9\u05D5\u05D5\u05D7 \u05E1\u05E4\u05E7 \u05D4\u05E1\u05E2\u05D3\u05D4" })] }), _jsxs("button", { onClick: () => setActiveTab('ramtal'), className: `flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition ${activeTab === 'ramtal'
+                                            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'}`, children: [_jsx(FileEdit, { className: "w-4 h-4" }), _jsx("span", { children: "1. \u05D3\u05D9\u05D5\u05D5\u05D7 \u05E1\u05E4\u05E7 \u05D4\u05E1\u05E2\u05D3\u05D4" })] })), allowedTabs.includes('ramtal') && (_jsxs("button", { onClick: () => setActiveTab('ramtal'), className: `flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${activeTab === 'ramtal'
                                             ? 'bg-emerald-600 text-white shadow-xs'
-                                            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'}`, children: [_jsx(CheckCircle2, { className: "w-4 h-4" }), _jsx("span", { children: "2. \u05D0\u05D9\u05E9\u05D5\u05E8 \u05E8\u05DE\u05EA\"\u05DC \u05DE\u05E9\u05D8\u05E8\u05EA\u05D9" })] }), _jsxs("button", { onClick: () => setActiveTab('food_dept'), className: `flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition ${activeTab === 'food_dept'
+                                            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'}`, children: [_jsx(CheckCircle2, { className: "w-4 h-4" }), _jsx("span", { children: "2. \u05D0\u05D9\u05E9\u05D5\u05E8 \u05E8\u05DE\u05EA\"\u05DC \u05DE\u05E9\u05D8\u05E8\u05EA\u05D9" })] })), allowedTabs.includes('food_dept') && (_jsxs("button", { onClick: () => setActiveTab('food_dept'), className: `flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${activeTab === 'food_dept'
                                             ? 'bg-indigo-700 text-white shadow-xs'
-                                            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'}`, children: [_jsx(BarChart3, { className: "w-4 h-4" }), _jsx("span", { children: "3. \u05D1\u05E7\u05E8\u05EA \u05DE\u05D3\u05D5\u05E8 \u05DE\u05D6\u05D5\u05DF (R1\u2013R5)" })] }), _jsxs("button", { onClick: () => setActiveTab('clock_sync'), className: `flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition ${activeTab === 'clock_sync'
+                                            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'}`, children: [_jsx(BarChart3, { className: "w-4 h-4" }), _jsx("span", { children: "3. \u05D1\u05E7\u05E8\u05EA \u05DE\u05D3\u05D5\u05E8 \u05DE\u05D6\u05D5\u05DF (R1\u2013R5)" })] })), allowedTabs.includes('clock_sync') && (_jsxs("button", { onClick: () => setActiveTab('clock_sync'), className: `flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${activeTab === 'clock_sync'
                                             ? 'bg-amber-600 text-white shadow-xs'
-                                            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'}`, children: [_jsx(Clock, { className: "w-4 h-4" }), _jsx("span", { children: "4. \u05D4\u05E6\u05DC\u05D1\u05EA \u05E9\u05E2\u05D5\u05DF \u05E0\u05D5\u05DB\u05D7\u05D5\u05EA" })] }), _jsxs("button", { onClick: () => setActiveTab('admin'), className: `flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition ${activeTab === 'admin'
+                                            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'}`, children: [_jsx(Clock, { className: "w-4 h-4" }), _jsx("span", { children: "4. \u05D4\u05E6\u05DC\u05D1\u05EA \u05E9\u05E2\u05D5\u05DF \u05E0\u05D5\u05DB\u05D7\u05D5\u05EA" })] })), allowedTabs.includes('admin') && (_jsxs("button", { onClick: () => setActiveTab('admin'), className: `flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${activeTab === 'admin'
                                             ? 'bg-purple-700 text-white shadow-xs'
-                                            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'}`, children: [_jsx(Settings, { className: "w-4 h-4" }), _jsx("span", { children: "5. \u05D4\u05D2\u05D3\u05E8\u05D5\u05EA \u05DE\u05E2\u05E8\u05DB\u05EA \u05D5\u05D0\u05D3\u05DE\u05D9\u05DF" })] })] }), _jsxs("div", { className: "hidden md:flex items-center gap-1.5 text-xs text-slate-500", children: [_jsx("span", { children: "\u05EA\u05E4\u05E7\u05D9\u05D3\u05DA \u05D4\u05E4\u05E2\u05D9\u05DC:" }), _jsx("strong", { className: "text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-200", children: currentUser.fullName })] })] }) }) }), _jsxs("main", { className: "flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6", children: [activeTab === 'supplier' && (_jsx(SupplierView, { currentUser: currentUser, kitchens: kitchens, mealTypes: mockMealTypes, dailyReports: dailyReports, monthlySummaries: monthlySummaries, onAddDailyReport: handleAddDailyReport, onSubmitMonth: handleSubmitMonth })), activeTab === 'ramtal' && (_jsx(RamtalView, { currentUser: currentUser, kitchens: kitchens, dailyReports: dailyReports, monthlySummaries: monthlySummaries, onApproveSummary: handleApproveSummary, onReturnSummary: handleReturnSummary, onAdjustDailyRow: handleAdjustDailyRow })), activeTab === 'food_dept' && (_jsx(FoodDeptView, { currentUser: currentUser, kitchens: kitchens, tariffs: mockTariffs, dailyReports: dailyReports, monthlySummaries: monthlySummaries, onFinalApproveSummary: handleFinalApproveSummary })), activeTab === 'clock_sync' && (_jsx(ClockReconciliationView, {})), activeTab === 'admin' && (_jsx(AdminView, { currentUser: currentUser, kitchens: kitchens, suppliers: mockSuppliers, tariffs: mockTariffs, users: mockUsers, onToggleKitchenActive: handleToggleKitchenActive }))] }), _jsx("footer", { className: "bg-white border-t border-slate-200 py-4 text-center text-xs text-slate-500", children: "\u05DE\u05E9\u05D8\u05E8\u05EA \u05D9\u05E9\u05E8\u05D0\u05DC \u2022 \u05D0\u05D2\u05E3 \u05D4\u05EA\u05DE\u05D9\u05DB\u05D4 \u05D4\u05DC\u05D5\u05D2\u05D9\u05E1\u05D8\u05D9\u05EA (\u05D0\u05EA\"\u05DC) \u2022 \u05DE\u05D3\u05D5\u05E8 \u05DE\u05D6\u05D5\u05DF \u05D5\u05D7\u05D5\u05DC\u05D9\u05D9\u05EA \u05D4\u05EA\u05D9\u05D9\u05E2\u05DC\u05D5\u05EA \u05DB\u05DC\u05DB\u05DC\u05D9\u05EA \u00A9 2026" })] }));
+                                            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'}`, children: [_jsx(Settings, { className: "w-4 h-4" }), _jsx("span", { children: "5. \u05D4\u05D2\u05D3\u05E8\u05D5\u05EA \u05DE\u05E2\u05E8\u05DB\u05EA \u05D5\u05D0\u05D3\u05DE\u05D9\u05DF" })] }))] }), _jsxs("div", { className: "hidden md:flex items-center gap-1.5 text-xs text-slate-500", children: [_jsx("span", { children: "\u05EA\u05E4\u05E7\u05D9\u05D3\u05DA \u05D4\u05E4\u05E2\u05D9\u05DC:" }), _jsx("strong", { className: "text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-200", children: currentUser.fullName }), currentUser.role === 'viewer_finance' && (_jsx("span", { className: "text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200", children: "\u05E6\u05E4\u05D9\u05D9\u05D4 \u05D1\u05DC\u05D1\u05D3 (Read-Only)" }))] })] }) }) })), _jsxs("main", { className: "flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 relative", children: [welcomeBanner && (_jsxs("div", { className: "fixed top-20 left-4 sm:left-8 z-50 bg-gradient-to-r from-blue-700 via-indigo-700 to-purple-800 text-white px-5 py-3.5 rounded-2xl shadow-2xl border border-blue-400/40 flex items-center gap-3", children: [_jsx("div", { className: "p-2 bg-white/20 rounded-xl shrink-0", children: _jsx(UserCheck, { className: "w-5 h-5 text-blue-100" }) }), _jsxs("div", { children: [_jsx("div", { className: "text-[11px] text-blue-200 font-medium", children: "\u05D4\u05EA\u05D7\u05D1\u05E8\u05D5\u05EA \u05DE\u05D0\u05D5\u05D1\u05D8\u05D7\u05EA \u05D1\u05D5\u05E6\u05E2\u05D4 \u05D1\u05D4\u05E6\u05DC\u05D7\u05D4" }), _jsx("div", { className: "text-sm font-bold", children: welcomeBanner })] }), _jsx("button", { onClick: () => setWelcomeBanner(null), className: "mr-2 text-blue-200 hover:text-white p-1 cursor-pointer", children: _jsx(X, { className: "w-4 h-4" }) })] })), activeTab === 'supplier' && (_jsx(SupplierView, { currentUser: currentUser, isSuperAdmin: isSuperAdmin, kitchens: kitchens, disabledKitchens: disabledKitchens, mealTypes: mockMealTypes, dailyReports: dailyReports, monthlySummaries: monthlySummaries, onAddDailyReport: handleAddDailyReport, onUpdateDailyReport: handleUpdateDailyReport, onDuplicateDailyReport: handleDuplicateDailyReport, onDeleteDailyReport: handleDeleteDailyReport, onSubmitMonth: handleSubmitMonth, onToggleKitchenActive: handleToggleKitchenActive, onAdminResetDrafts: handleAdminResetDrafts, onAdminDeleteAllReports: handleAdminDeleteAllReports })), activeTab === 'ramtal' && (_jsx(RamtalView, { currentUser: currentUser, kitchens: kitchens, dailyReports: dailyReports, monthlySummaries: monthlySummaries, onApproveSummary: handleApproveSummary, onReturnSummary: handleReturnSummary, onAdjustDailyRow: handleAdjustDailyRow, onApproveDailyRow: handleApproveDailyRow, onReturnDailyRow: handleReturnDailyRow })), activeTab === 'food_dept' && (_jsx(FoodDeptView, { currentUser: currentUser, kitchens: kitchens, tariffs: tariffs, dailyReports: dailyReports, monthlySummaries: monthlySummaries, onFinalApproveSummary: handleFinalApproveSummary })), activeTab === 'clock_sync' && (_jsx(ClockReconciliationView, {})), activeTab === 'admin' && (_jsx(AdminView, { currentUser: currentUser, kitchens: kitchens, suppliers: mockSuppliers, tariffs: tariffs, users: mockUsers, onToggleKitchenActive: handleToggleKitchenActive, onUpdateTariff: handleUpdateTariff, onUpdateGlobalTariff: handleUpdateGlobalTariff }))] }), _jsx("footer", { className: "bg-white border-t border-slate-200 py-4 text-center text-xs text-slate-500", children: "\u05DE\u05E9\u05D8\u05E8\u05EA \u05D9\u05E9\u05E8\u05D0\u05DC \u2022 \u05D0\u05D2\u05E3 \u05D4\u05EA\u05DE\u05D9\u05DB\u05D4 \u05D4\u05DC\u05D5\u05D2\u05D9\u05E1\u05D8\u05D9\u05EA (\u05D0\u05EA\"\u05DC) \u2022 \u05DE\u05D3\u05D5\u05E8 \u05DE\u05D6\u05D5\u05DF \u05D5\u05D7\u05D5\u05DC\u05D9\u05D9\u05EA \u05D4\u05EA\u05D9\u05D9\u05E2\u05DC\u05D5\u05EA \u05DB\u05DC\u05DB\u05DC\u05D9\u05EA \u00A9 2026" })] }));
 };
+export default App;
