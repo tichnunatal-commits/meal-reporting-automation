@@ -33,6 +33,7 @@ interface SupplierViewProps {
   monthlySummaries: MonthlyKitchenSummary[];
   onAddDailyReport: (report: Omit<DailyReportRow, 'id'>) => void;
   onUpdateDailyReport?: (updatedRow: DailyReportRow) => void;
+  onAutoSaveDailyReport?: (reportId: number, fields: Partial<DailyReportRow>) => void;
   onDuplicateDailyReport?: (rowId: number) => void;
   onDeleteDailyReport?: (rowId: number) => void;
   onSubmitMonth: (options: { kitchenId: number; month: number; year: number; summaryId?: number }) => void;
@@ -51,6 +52,7 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
   monthlySummaries,
   onAddDailyReport,
   onUpdateDailyReport,
+  onAutoSaveDailyReport,
   onDuplicateDailyReport,
   onDeleteDailyReport,
   onSubmitMonth,
@@ -139,6 +141,16 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
     setUploadedFile('');
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
+    }
+  };
+
+  const [autoSavedRowId, setAutoSavedRowId] = useState<number | null>(null);
+
+  const autoSaveRowField = (rowId: number, fields: Partial<DailyReportRow>) => {
+    if (onAutoSaveDailyReport) {
+      onAutoSaveDailyReport(rowId, fields);
+      setAutoSavedRowId(rowId);
+      setTimeout(() => setAutoSavedRowId(null), 2500);
     }
   };
 
@@ -1028,7 +1040,10 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
                         <input
                           type="date"
                           value={editDate}
-                          onChange={(e) => setEditDate(e.target.value)}
+                          onChange={(e) => {
+                            setEditDate(e.target.value);
+                            autoSaveRowField(row.id, { reportDate: e.target.value });
+                          }}
                           className="w-32 bg-white border border-slate-300 rounded px-2 py-1 text-xs focus:outline-none focus:border-blue-500 font-mono"
                         />
                       ) : (
@@ -1041,7 +1056,12 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
                       {isEditing ? (
                         <select
                           value={editMealTypeId}
-                          onChange={(e) => setEditMealTypeId(Number(e.target.value))}
+                          onChange={(e) => {
+                            const newTypeId = Number(e.target.value);
+                            setEditMealTypeId(newTypeId);
+                            const m = mealTypes.find(mt => mt.id === newTypeId);
+                            autoSaveRowField(row.id, { mealTypeId: newTypeId, mealTypeName: m?.nameHebrew || row.mealTypeName });
+                          }}
                           className="w-36 bg-white border border-slate-300 rounded px-2 py-1 text-xs focus:outline-none focus:border-blue-500"
                         >
                           {mealTypes.map(m => (
@@ -1061,7 +1081,13 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
                             type="number"
                             min="0"
                             value={editDiningQty}
-                            onChange={(e) => setEditDiningQty(e.target.value === '' ? '' : Number(e.target.value))}
+                            onChange={(e) => {
+                              const val = e.target.value === '' ? '' : Number(e.target.value);
+                              setEditDiningQty(val);
+                              const dNum = Number(val) || 0;
+                              const tNum = Number(editTakeawayQty) || 0;
+                              autoSaveRowField(row.id, { diningHallQty: dNum, rawReportedQty: dNum + tNum });
+                            }}
                             className="w-16 bg-white border border-slate-300 rounded px-2 py-1 text-center font-bold text-xs focus:outline-none focus:border-blue-500"
                           />
                         )
@@ -1078,7 +1104,13 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
                             type="number"
                             min="0"
                             value={editTakeawayQty}
-                            onChange={(e) => setEditTakeawayQty(e.target.value === '' ? '' : Number(e.target.value))}
+                            onChange={(e) => {
+                              const val = e.target.value === '' ? '' : Number(e.target.value);
+                              setEditTakeawayQty(val);
+                              const tNum = Number(val) || 0;
+                              const dNum = Number(editDiningQty) || 0;
+                              autoSaveRowField(row.id, { takeawayQty: tNum, rawReportedQty: dNum + tNum });
+                            }}
                             className="w-16 bg-white border border-slate-300 rounded px-2 py-1 text-center font-bold text-xs focus:outline-none focus:border-blue-500"
                           />
                         )
@@ -1096,7 +1128,12 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
                               type="number"
                               min="1"
                               value={editTransportKm}
-                              onChange={(e) => setEditTransportKm(e.target.value === '' ? '' : Number(e.target.value))}
+                              onChange={(e) => {
+                                const val = e.target.value === '' ? '' : Number(e.target.value);
+                                setEditTransportKm(val);
+                                const km = Number(val) || 0;
+                                autoSaveRowField(row.id, { rawReportedQty: km });
+                              }}
                               className="w-16 bg-white border border-blue-400 rounded px-2 py-1 text-center font-bold text-xs"
                             />
                             <span>ק"מ</span>
@@ -1121,7 +1158,11 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
                             type="number"
                             min="0"
                             value={editEventCost}
-                            onChange={(e) => setEditEventCost(e.target.value === '' ? '' : Number(e.target.value))}
+                            onChange={(e) => {
+                              const val = e.target.value === '' ? '' : Number(e.target.value);
+                              setEditEventCost(val);
+                              autoSaveRowField(row.id, { eventCostNis: Number(val) || 0 });
+                            }}
                             placeholder="סכום בש''ח"
                             className="w-24 bg-white border border-amber-400 rounded px-2 py-1 text-xs font-bold text-amber-900 focus:outline-none"
                           />
@@ -1141,7 +1182,10 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
                         <input
                           type="text"
                           value={editNotes}
-                          onChange={(e) => setEditNotes(e.target.value)}
+                          onChange={(e) => {
+                            setEditNotes(e.target.value);
+                            autoSaveRowField(row.id, { notes: e.target.value });
+                          }}
                           placeholder="הערה/אסמכתא *..."
                           required
                           className="w-full bg-white border border-slate-300 rounded px-2 py-1 text-xs focus:outline-none focus:border-blue-500"
@@ -1172,24 +1216,31 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
                           <span>⛔ תחנה מושבתת</span>
                         </span>
                       ) : isEditing ? (
-                        <div className="flex items-center justify-center gap-1">
-                          <button
-                            type="button"
-                            onClick={() => saveEditRow(row)}
-                            className="p-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-2xs cursor-pointer"
-                            title="שמור שינויים"
-                          >
-                            <Check className="w-3.5 h-3.5" />
-                            <span>שמור</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={cancelEditRow}
-                            className="p-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-xs transition cursor-pointer"
-                            title="בטל"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                          </button>
+                        <div className="flex flex-col items-center justify-center gap-1">
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => saveEditRow(row)}
+                              className="p-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-2xs cursor-pointer"
+                              title="שמור שינויים"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                              <span>שמור</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={cancelEditRow}
+                              className="p-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-xs transition cursor-pointer"
+                              title="בטל"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                          {autoSavedRowId === row.id && (
+                            <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 animate-pulse">
+                              נשמר בענן ✓
+                            </span>
+                          )}
                         </div>
                       ) : rowStatus === 'returned_for_revision' || rowStatus === 'rejected' ? (
                         /* 5. חריג: נדרש תיקון - פתוח לעריכה או מחיקה עבור הספק */

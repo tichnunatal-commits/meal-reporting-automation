@@ -7,8 +7,8 @@ service cloud.firestore {
     function hasRequiredReportFields() {
       let data = request.resource.data;
       return data.keys().hasAll(['kitchenId', 'reportDate', 'mealTypeId', 'rawReportedQty'])
-             && data.kitchenId is int
-             && data.rawReportedQty is int;
+             && (data.kitchenId is int || data.kitchenId is number)
+             && (data.rawReportedQty is int || data.rawReportedQty is number);
     }
 
     // Daily reports — suppliers write their own, ramtal/admin read all

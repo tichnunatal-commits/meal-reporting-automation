@@ -91,7 +91,7 @@ export async function seedInitialDataIfEmpty(
       if (localReports && localReports.length > 0) {
         for (const report of localReports) {
           const reportRef = doc(db, COLLECTIONS.DAILY_REPORTS, String(report.id));
-          batch.set(reportRef, report);
+          batch.set(reportRef, cleanFirestoreData(report));
         }
       }
 
@@ -99,7 +99,7 @@ export async function seedInitialDataIfEmpty(
       if (localSummaries && localSummaries.length > 0) {
         for (const summary of localSummaries) {
           const summaryRef = doc(db, COLLECTIONS.MONTHLY_SUMMARIES, String(summary.id));
-          batch.set(summaryRef, summary);
+          batch.set(summaryRef, cleanFirestoreData(summary));
         }
       }
 
@@ -189,11 +189,36 @@ export function subscribeToAppConfig(
 }
 
 /**
+ * Helper to strip any `undefined` values from data objects before saving to Firestore.
+ * Firestore strictly rejects `undefined` values.
+ */
+export function cleanFirestoreData<T extends Record<string, any>>(data: T): T {
+  const result: any = {};
+  for (const [key, value] of Object.entries(data)) {
+    if (value !== undefined) {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+
+/**
  * Firestore Mutations
  */
 export async function saveDailyReportToFirestore(report: DailyReportRow): Promise<void> {
   const reportRef = doc(db, COLLECTIONS.DAILY_REPORTS, String(report.id));
-  await setDoc(reportRef, report, { merge: true });
+  const clean = cleanFirestoreData(report);
+  await setDoc(reportRef, clean, { merge: true });
+}
+
+export async function updateDailyReportInFirestore(
+  reportId: number,
+  fields: Partial<DailyReportRow>
+): Promise<void> {
+  const clean = cleanFirestoreData(fields);
+  if (Object.keys(clean).length === 0) return;
+  const reportRef = doc(db, COLLECTIONS.DAILY_REPORTS, String(reportId));
+  await updateDoc(reportRef, clean);
 }
 
 export async function deleteDailyReportFromFirestore(reportId: number): Promise<void> {
@@ -203,7 +228,8 @@ export async function deleteDailyReportFromFirestore(reportId: number): Promise<
 
 export async function saveMonthlySummaryToFirestore(summary: MonthlyKitchenSummary): Promise<void> {
   const summaryRef = doc(db, COLLECTIONS.MONTHLY_SUMMARIES, String(summary.id));
-  await setDoc(summaryRef, summary, { merge: true });
+  const clean = cleanFirestoreData(summary);
+  await setDoc(summaryRef, clean, { merge: true });
 }
 
 export async function saveDisabledKitchensToFirestore(disabledKitchens: number[]): Promise<void> {

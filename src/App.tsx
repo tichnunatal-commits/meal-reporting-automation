@@ -23,6 +23,7 @@ import {
   subscribeToMonthlySummaries,
   subscribeToAppConfig,
   saveDailyReportToFirestore,
+  updateDailyReportInFirestore,
   deleteDailyReportFromFirestore,
   saveMonthlySummaryToFirestore,
   saveDisabledKitchensToFirestore,
@@ -378,6 +379,18 @@ export const App: React.FC = () => {
     }));
   };
 
+  const handleAutoSaveDailyReport = (reportId: number, fields: Partial<DailyReportRow>) => {
+    const cleanFields = sanitizeDailyReportInput(fields as Record<string, unknown>) as Partial<DailyReportRow>;
+    setDailyReports(prev => prev.map(r => r.id === reportId ? { ...r, ...cleanFields } : r));
+    updateDailyReportInFirestore(reportId, cleanFields).catch(err => {
+      console.warn('updateDoc auto-save error, fallback to full save:', err);
+      const target = dailyReports.find(r => r.id === reportId);
+      if (target) {
+        saveDailyReportToFirestore({ ...target, ...cleanFields }).catch(console.error);
+      }
+    });
+  };
+
   const handleDuplicateDailyReport = (rowId: number) => {
     const target = dailyReports.find(r => r.id === rowId);
     if (!target) return;
@@ -554,7 +567,8 @@ export const App: React.FC = () => {
     if (!targetSummary) return;
 
     const k = kitchens.find(item => item.id === targetSummary.kitchenId);
-    const kReports = dailyReports.filter(r => r.kitchenId === targetSummary.kitchenId);
+    // Exclude draft rows from Ramtal calculation and approval
+    const kReports = dailyReports.filter(r => r.kitchenId === targetSummary.kitchenId && r.status !== 'draft');
     const kTariffs = mockTariffs.filter(t => t.kitchenId === targetSummary.kitchenId);
     const calc = k ? MealCalculationEngine.calculateMonthlySummary(k, kReports, kTariffs) : null;
 
@@ -570,7 +584,7 @@ export const App: React.FC = () => {
     saveMonthlySummaryToFirestore(updatedSummary).catch(console.error);
 
     setDailyReports(prev => prev.map(r => {
-      if (r.kitchenId === targetSummary.kitchenId) {
+      if (r.kitchenId === targetSummary.kitchenId && r.status !== 'draft') {
         const updated = { ...r, status: 'ramtal_approved' as const };
         saveDailyReportToFirestore(updated).catch(console.error);
         return updated;
@@ -1071,6 +1085,7 @@ export const App: React.FC = () => {
             monthlySummaries={monthlySummaries}
             onAddDailyReport={handleAddDailyReport}
             onUpdateDailyReport={handleUpdateDailyReport}
+            onAutoSaveDailyReport={handleAutoSaveDailyReport}
             onDuplicateDailyReport={handleDuplicateDailyReport}
             onDeleteDailyReport={handleDeleteDailyReport}
             onSubmitMonth={handleSubmitMonth}

@@ -15,6 +15,8 @@ docs/scratch_*.md
 node_modules/
 dist/
 build/
+dist-ts/
+.firebase/
 
 # Environment & secrets
 .env

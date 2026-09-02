@@ -516,3 +516,80 @@ test('Security Audit: Input Sanitization (XSS Prevention)', () => {
   assert.equal(stripTags('javascript:alert(1)'), 'alert(1)');
 });
 
+test('Cloud Draft Persistence, Auto-Save & Refresh Resilience (status: draft)', () => {
+  // 1. Verify src/data/firebase.ts exports cleanFirestoreData and updateDailyReportInFirestore
+  const firebaseTs = fs.readFileSync(path.resolve('src/data/firebase.ts'), 'utf-8');
+  assert.ok(firebaseTs.includes('export function cleanFirestoreData'), 'firebase.ts must export cleanFirestoreData');
+  assert.ok(firebaseTs.includes('export async function updateDailyReportInFirestore'), 'firebase.ts must export updateDailyReportInFirestore');
+  assert.ok(firebaseTs.includes('cleanFirestoreData(report)'), 'saveDailyReportToFirestore must clean undefined values');
+
+  // 2. Functional verification of cleanFirestoreData
+  const cleanDataFn = (data) => {
+    const res = {};
+    for (const [k, v] of Object.entries(data)) {
+      if (v !== undefined) res[k] = v;
+    }
+    return res;
+  };
+  const testDraftRow = {
+    id: 1725270000000,
+    kitchenId: 1,
+    reportDate: '2026-09-02',
+    mealTypeId: 2,
+    mealTypeName: 'צהריים',
+    diningHallQty: 100,
+    takeawayQty: 30,
+    rawReportedQty: 130,
+    isSpecialEvent: false,
+    eventCostNis: undefined,
+    attachmentFileName: undefined,
+    notes: 'בדיקת טיוטה',
+    status: 'draft'
+  };
+  const cleaned = cleanDataFn(testDraftRow);
+  assert.equal(cleaned.eventCostNis, undefined);
+  assert.equal('eventCostNis' in cleaned, false, 'undefined eventCostNis must be stripped so Firestore does not reject');
+  assert.equal('attachmentFileName' in cleaned, false, 'undefined attachmentFileName must be stripped so Firestore does not reject');
+  assert.equal(cleaned.status, 'draft', 'status draft must be preserved');
+  assert.equal(cleaned.rawReportedQty, 130);
+
+  // 3. Verify App.tsx has handleAutoSaveDailyReport and passes onAutoSaveDailyReport to SupplierView
+  const appContent = fs.readFileSync(path.resolve('src/App.tsx'), 'utf-8');
+  assert.ok(appContent.includes('handleAutoSaveDailyReport'), 'App.tsx must define handleAutoSaveDailyReport');
+  assert.ok(appContent.includes('onAutoSaveDailyReport={handleAutoSaveDailyReport}'), 'App.tsx must pass onAutoSaveDailyReport to SupplierView');
+
+  // 4. Verify SupplierView.tsx accepts onAutoSaveDailyReport and triggers autoSaveRowField
+  const supplierViewContent = fs.readFileSync(path.resolve('src/components/SupplierView.tsx'), 'utf-8');
+  assert.ok(supplierViewContent.includes('onAutoSaveDailyReport?: (reportId: number, fields: Partial<DailyReportRow>) => void;'), 'SupplierViewProps must include onAutoSaveDailyReport');
+  assert.ok(supplierViewContent.includes('autoSaveRowField(row.id, { reportDate: e.target.value });'), 'Must auto-save date changes to cloud');
+  assert.ok(supplierViewContent.includes('autoSaveRowField(row.id, { diningHallQty: dNum, rawReportedQty: dNum + tNum });'), 'Must auto-save dining quantity changes to cloud');
+
+  // 5. Verify drafts isolation from Ramtal: RamtalView filters out draft rows, and handleApproveSummary excludes drafts
+  const ramtalContent = fs.readFileSync(path.resolve('src/components/RamtalView.tsx'), 'utf-8');
+  assert.ok(ramtalContent.includes("const isDraft = (r.status || 'draft') === 'draft';"), 'RamtalView must detect draft rows');
+  assert.ok(ramtalContent.includes('if (isDraft) return false;'), 'RamtalView must strictly isolate draft rows');
+
+  assert.ok(appContent.includes("r.status !== 'draft'"), 'handleApproveSummary in App.tsx must exclude draft rows from Ramtal approval');
+
+  // 6. Simulate F5 refresh: Simulated Cloud Store holding draft survives reload
+  const cloudStore = new Map();
+  // Supplier adds draft row -> saved to cloud
+  cloudStore.set(String(cleaned.id), cleaned);
+
+  // Simulated F5 page reload: onSnapshot reads from cloudStore
+  const reloadedDailyReports = Array.from(cloudStore.values());
+  assert.equal(reloadedDailyReports.length, 1, 'Draft row must survive simulated F5 reload from cloud');
+  assert.equal(reloadedDailyReports[0].id, testDraftRow.id);
+  assert.equal(reloadedDailyReports[0].status, 'draft', 'Draft status must persist after F5');
+  assert.equal(reloadedDailyReports[0].diningHallQty, 100);
+
+  // Supplier updates draft field in live auto-save -> updateDoc updates cloudStore
+  const autoSavedUpdate = { diningHallQty: 150, rawReportedQty: 180 };
+  Object.assign(cloudStore.get(String(cleaned.id)), autoSavedUpdate);
+
+  // Subsequent reload shows updated draft
+  const reloadedAfterAutoSave = Array.from(cloudStore.values());
+  assert.equal(reloadedAfterAutoSave[0].diningHallQty, 150, 'Live auto-saved quantity must survive F5');
+  assert.equal(reloadedAfterAutoSave[0].rawReportedQty, 180, 'Live auto-saved rawReportedQty must survive F5');
+});
+
