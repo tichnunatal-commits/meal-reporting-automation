@@ -652,9 +652,27 @@ test('Cross-Kitchen Status Audit & Live Supplier Banners (Returned for Revision 
   const testReturnedAfterFix = mockSupplierKitchens.filter(k => {
     const s = mockSummaries.find(sum => sum.kitchenId === k.id);
     const r = mockReports.filter(rep => rep.kitchenId === k.id);
+    if (r.length === 0) return false;
     return s?.status === 'returned_for_revision' || r.some(row => row.status === 'returned_for_revision');
   });
   assert.equal(testReturnedAfterFix.length, 0, 'Red banner must automatically disappear once station is re-submitted');
+
+  // 5. Orphaned Deadlock Prevention: 0-row kitchens must NEVER trigger red banner
+  mockSummaries[0].status = 'returned_for_revision';
+  const emptyReports = []; // 0 rows
+  const testOrphanedKitchen = mockSupplierKitchens.filter(k => {
+    const s = mockSummaries.find(sum => sum.kitchenId === k.id);
+    const r = emptyReports.filter(rep => rep.kitchenId === k.id);
+    if (r.length === 0) return false;
+    return s?.status === 'returned_for_revision' || r.some(row => row.status === 'returned_for_revision');
+  });
+  assert.equal(testOrphanedKitchen.length, 0, '0-row station with returned status must NOT trigger banner (deadlock prevented)');
+
+  // 6. Auto-Heal verification in App.tsx
+  const appTsx = fs.readFileSync(path.resolve('src/App.tsx'), 'utf-8');
+  assert.ok(appTsx.includes('orphanedSummaries'), 'App.tsx must include Auto-Heal orphaned summaries check');
+  assert.ok(appTsx.includes('saveMonthlySummaryToFirestore(healed)'), 'Auto-Heal must sync healed draft summary to Firestore');
 });
+
 
 

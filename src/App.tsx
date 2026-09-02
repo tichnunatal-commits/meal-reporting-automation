@@ -199,6 +199,37 @@ export const App: React.FC = () => {
     };
   }, []);
 
+  // 3. מנגנון ריפוי עצמי (Auto-Heal): איפוס סיכומים יתומים ל-draft אם יש 0 שורות דיווח פעילות
+  useEffect(() => {
+    const orphanedSummaries = monthlySummaries.filter(s => {
+      if (s.status === 'returned_for_revision' || s.status === 'rejected') {
+        const kReports = dailyReports.filter(r => r.kitchenId === s.kitchenId && r.status !== 'deleted_by_supplier');
+        return kReports.length === 0;
+      }
+      return false;
+    });
+
+    if (orphanedSummaries.length > 0) {
+      const orphanedKitchenIds = new Set(orphanedSummaries.map(s => s.kitchenId));
+      setMonthlySummaries(prev => prev.map(s => {
+        if (orphanedKitchenIds.has(s.kitchenId)) {
+          const healed: MonthlyKitchenSummary = {
+            ...s,
+            status: 'draft',
+            totalReportedRaw: 0,
+            totalRamtalApproved: 0,
+            calculatedNetMeals: 0,
+            calculatedTotalAmountNis: 0,
+            revisionReason: undefined
+          };
+          saveMonthlySummaryToFirestore(healed).catch(console.error);
+          return healed;
+        }
+        return s;
+      }));
+    }
+  }, [dailyReports, monthlySummaries]);
+
   const allowedTabs = getAllowedTabsForRole(currentUser.role);
 
   // טעינה מיידית של נתוני 134 התחנות והתעריפים מהשרת
@@ -864,6 +895,27 @@ export const App: React.FC = () => {
       } catch (e) {
         console.error(e);
       }
+      // Check if any summaries for in-scope kitchens now have 0 rows and are in returned/rejected state
+      setMonthlySummaries(mPrev => mPrev.map(s => {
+        if (isKitchenInScope(s.kitchenId, scope, kitchenId, supplierId)) {
+          const remainingRows = filtered.filter(r => r.kitchenId === s.kitchenId && r.status !== 'deleted_by_supplier');
+          if (remainingRows.length === 0 && (s.status === 'returned_for_revision' || s.status === 'rejected')) {
+            const healed: MonthlyKitchenSummary = {
+              ...s,
+              status: 'draft',
+              totalReportedRaw: 0,
+              totalRamtalApproved: 0,
+              calculatedNetMeals: 0,
+              calculatedTotalAmountNis: 0,
+              revisionReason: undefined
+            };
+            saveMonthlySummaryToFirestore(healed).catch(console.error);
+            return healed;
+          }
+        }
+        return s;
+      }));
+
       return filtered;
     });
 
@@ -887,13 +939,32 @@ export const App: React.FC = () => {
     const currentMonthPrefix = todayStr.substring(0, 7);
 
     if (scope === 'all_kitchens' && filterType === 'all') {
-      // 1. איפוס מוחלט (Master Reset) ל-0 שורות ו-0 סיכומים במערכת
+      // 1. איפוס מוחלט (Master Reset) ל-0 שורות ואיפוס כל הסיכומים ל-draft
       const allReportIds = dailyReports.map(r => r.id);
       setDailyReports([]);
-      setMonthlySummaries([]);
+      setMonthlySummaries(prev => {
+        const wiped = prev.map(s => {
+          const resetSummary: MonthlyKitchenSummary = {
+            ...s,
+            status: 'draft',
+            totalReportedRaw: 0,
+            totalRamtalApproved: 0,
+            calculatedNetMeals: 0,
+            calculatedTotalAmountNis: 0,
+            revisionReason: undefined
+          };
+          saveMonthlySummaryToFirestore(resetSummary).catch(console.error);
+          return resetSummary;
+        });
+        try {
+          localStorage.setItem(SUMMARIES_STORAGE_KEY, JSON.stringify(wiped));
+        } catch (e) {
+          console.error(e);
+        }
+        return wiped;
+      });
       try {
         localStorage.setItem(REPORTS_STORAGE_KEY, JSON.stringify([]));
-        localStorage.setItem(SUMMARIES_STORAGE_KEY, JSON.stringify([]));
       } catch (e) {
         console.error(e);
       }
@@ -924,13 +995,23 @@ export const App: React.FC = () => {
       batchDeleteReportsFromFirestore(idsToDelete).catch(console.error);
     }
 
-    // Reset summaries for matching kitchens
+    // Reset and heal summaries for matching kitchens in scope
     setMonthlySummaries(prev => {
-      const updated = prev.filter(s => {
+      const updated = prev.map(s => {
         if (isKitchenInScope(s.kitchenId, scope, kitchenId, supplierId)) {
-          if (filterType === 'all') return false; // wipe summary for scope
+          const resetSummary: MonthlyKitchenSummary = {
+            ...s,
+            status: 'draft',
+            totalReportedRaw: 0,
+            totalRamtalApproved: 0,
+            calculatedNetMeals: 0,
+            calculatedTotalAmountNis: 0,
+            revisionReason: undefined
+          };
+          saveMonthlySummaryToFirestore(resetSummary).catch(console.error);
+          return resetSummary;
         }
-        return true;
+        return s;
       });
       try {
         localStorage.setItem(SUMMARIES_STORAGE_KEY, JSON.stringify(updated));

@@ -79,7 +79,9 @@ export const SupplierView: React.FC<SupplierViewProps> = ({
   // 1. סריקה חוצת-מטבחים של הספק המחובר (Cross-Kitchen Status Audit)
   const returnedKitchens = myKitchens.filter(k => {
     const summary = monthlySummaries.find(s => s.kitchenId === k.id);
-    const kReports = dailyReports.filter(r => r.kitchenId === k.id);
+    const kReports = dailyReports.filter(r => r.kitchenId === k.id && r.status !== 'deleted_by_supplier');
+    // חוק ברזל: אם למטבח יש 0 שורות דיווח, אין להציג עבורו באנר חזרה לתיקון (מניעת Deadlock יתום)
+    if (kReports.length === 0) return false;
     const isSummaryReturned = summary?.status === 'returned_for_revision' || summary?.status === 'rejected';
     const hasReturnedRows = kReports.some(r => r.status === 'returned_for_revision' || r.status === 'rejected');
     return isSummaryReturned || hasReturnedRows;
