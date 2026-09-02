@@ -19,15 +19,15 @@ import {
 } from 'firebase/firestore';
 import { DailyReportRow, MonthlyKitchenSummary } from '../types/index.js';
 
-// Firebase Configuration for meal-reporting-app
+// Firebase Configuration — loaded from environment variables (VITE_FIREBASE_*)
 export const firebaseConfig = {
-  projectId: 'meal-reporting-app',
-  appId: '1:311309071485:web:82e99a5913101467262d14',
-  storageBucket: 'meal-reporting-app.firebasestorage.app',
-  apiKey: 'AIzaSyBihbt5XtIjaQ_1VBr1rvTTnfLhU_iOMBo',
-  authDomain: 'meal-reporting-app.firebaseapp.com',
-  messagingSenderId: '311309071485',
-  measurementId: 'G-CJS1HE3YCG'
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || 'meal-reporting-app',
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || '',
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || '',
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || '',
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || '',
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || ''
 };
 
 // Initialize Firebase App singleton

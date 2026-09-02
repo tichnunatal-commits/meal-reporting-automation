@@ -29,6 +29,8 @@ import {
   batchDeleteReportsFromFirestore,
   batchUpdateReportsStatusInFirestore
 } from './data/firebase';
+import { getAllowedTabs } from './utils/permissions';
+import { sanitizeText, sanitizeDailyReportInput, sanitizeReason } from './utils/sanitize';
 import {
   FileEdit,
   CheckCircle2,
@@ -45,21 +47,8 @@ const API_BASE = 'http://127.0.0.1:3001/api';
 
 export type TabKey = 'supplier' | 'ramtal' | 'food_dept' | 'clock_sync' | 'admin';
 
-export const getAllowedTabsForRole = (role: string): TabKey[] => {
-  switch (role) {
-    case 'supplier_reporter':
-      return ['supplier'];
-    case 'police_ramtal':
-      return ['ramtal'];
-    case 'food_dept_reviewer':
-      return ['ramtal', 'food_dept', 'clock_sync'];
-    case 'viewer_finance':
-      return ['food_dept', 'clock_sync'];
-    case 'system_admin':
-    default:
-      return ['supplier', 'ramtal', 'food_dept', 'clock_sync', 'admin'];
-  }
-};
+// Delegates to centralized permissions module (src/utils/permissions.ts)
+export const getAllowedTabsForRole = (role: string): TabKey[] => getAllowedTabs(role as any);
 
 const AUTH_STORAGE_KEY = 'police_meal_auth_session_v3';
 const REPORTS_STORAGE_KEY = 'police_daily_reports_v3';
@@ -332,6 +321,8 @@ export const App: React.FC = () => {
   };
 
   const handleAddDailyReport = async (newRow: Omit<DailyReportRow, 'id'>) => {
+    // Sanitize all text inputs before write
+    const sanitizedRow = sanitizeDailyReportInput(newRow as Record<string, unknown>) as Omit<DailyReportRow, 'id'>;
     try {
       await fetch(`${API_BASE}/reports/daily`, {
         method: 'POST',
@@ -343,15 +334,15 @@ export const App: React.FC = () => {
     }
 
     const created: DailyReportRow = {
-      ...newRow,
+      ...sanitizedRow,
       id: Date.now()
     };
     setDailyReports(prev => [created, ...prev]);
     saveDailyReportToFirestore(created).catch(console.error);
 
     setMonthlySummaries(prev => prev.map(s => {
-      if (s.kitchenId === newRow.kitchenId) {
-        const newTotalRaw = s.totalReportedRaw + newRow.rawReportedQty;
+      if (s.kitchenId === sanitizedRow.kitchenId) {
+        const newTotalRaw = s.totalReportedRaw + sanitizedRow.rawReportedQty;
         const updatedSummary = {
           ...s,
           totalReportedRaw: newTotalRaw,
@@ -365,10 +356,12 @@ export const App: React.FC = () => {
   };
 
   const handleUpdateDailyReport = (updatedRow: DailyReportRow) => {
+    // Sanitize all text inputs before write
+    const sanitized = sanitizeDailyReportInput(updatedRow as unknown as Record<string, unknown>) as unknown as DailyReportRow;
     // 4. כאשר ספק עורך ושומר שורה בסטטוס נדרש תיקון, עדכן אך ורק אותה לסטטוס ממתין לאישור רמת"ל
-    const finalRow: DailyReportRow = updatedRow.status === 'returned_for_revision'
-      ? { ...updatedRow, status: 'submitted' }
-      : updatedRow;
+    const finalRow: DailyReportRow = sanitized.status === 'returned_for_revision'
+      ? { ...sanitized, status: 'submitted' }
+      : sanitized;
 
     setDailyReports(prev => prev.map(r => r.id === finalRow.id ? finalRow : r));
     saveDailyReportToFirestore(finalRow).catch(console.error);
@@ -587,6 +580,7 @@ export const App: React.FC = () => {
   };
 
   const handleReturnSummary = async (summaryId: number, reason: string) => {
+    const cleanReason = sanitizeReason(reason);
     try {
       await fetch(`${API_BASE}/reports/ramtal-return`, {
         method: 'POST',
@@ -603,7 +597,7 @@ export const App: React.FC = () => {
     const updatedSummary: MonthlyKitchenSummary = {
       ...targetSummary,
       status: 'returned_for_revision',
-      revisionReason: reason
+      revisionReason: cleanReason
     };
 
     setMonthlySummaries(prev => prev.map(s => s.id === summaryId ? updatedSummary : s));
@@ -653,13 +647,14 @@ export const App: React.FC = () => {
   };
 
   const handleReturnDailyRow = (rowId: number, reason: string) => {
+    const cleanReason = sanitizeReason(reason);
     setDailyReports(prev => {
       const updated = prev.map(r => {
         if (r.id === rowId) {
           const u = {
             ...r,
             status: 'returned_for_revision' as const,
-            ramtalAdjustmentReason: reason
+            ramtalAdjustmentReason: cleanReason
           };
           saveDailyReportToFirestore(u).catch(console.error);
           return u;
@@ -673,7 +668,7 @@ export const App: React.FC = () => {
             const uSum = {
               ...s,
               status: 'returned_for_revision' as const,
-              revisionReason: reason
+              revisionReason: cleanReason
             };
             saveMonthlySummaryToFirestore(uSum).catch(console.error);
             return uSum;
@@ -686,11 +681,12 @@ export const App: React.FC = () => {
   };
 
   const handleAdjustDailyRow = async (rowId: number, newQty: number, reason: string) => {
+    const cleanReason = sanitizeReason(reason);
     try {
       await fetch(`${API_BASE}/reports/ramtal-adjust-row`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rowId, newQty, reason })
+        body: JSON.stringify({ rowId, newQty, reason: cleanReason })
       });
     } catch (e) {
       console.error(e);
@@ -702,7 +698,7 @@ export const App: React.FC = () => {
           const u = {
             ...r,
             ramtalAdjustedQty: newQty,
-            ramtalAdjustmentReason: reason,
+            ramtalAdjustmentReason: cleanReason,
             status: 'ramtal_approved' as const
           };
           saveDailyReportToFirestore(u).catch(console.error);

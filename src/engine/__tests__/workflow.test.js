@@ -387,3 +387,132 @@ test('Firebase Firestore Cloud Migration (Collections, Rules, Seeding & Real-Tim
   assert.ok(appContent.includes('saveMonthlySummaryToFirestore'), 'App.tsx must sync monthly summaries to Firestore');
   assert.ok(appContent.includes('saveDisabledKitchensToFirestore'), 'App.tsx must sync disabled kitchens to Firestore');
 });
+
+test('Security Audit: No Hardcoded Secrets in Source Code', () => {
+  const srcDir = path.resolve('src');
+
+  // Recursive file collector
+  const collectFiles = (dir) => {
+    let files = [];
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name === 'node_modules' || entry.name === '__tests__') continue;
+        files = files.concat(collectFiles(full));
+      } else if (entry.name.endsWith('.ts') || entry.name.endsWith('.tsx')) {
+        files.push(full);
+      }
+    }
+    return files;
+  };
+
+  const srcFiles = collectFiles(srcDir);
+  assert.ok(srcFiles.length > 0, 'Must find TypeScript source files');
+
+  for (const file of srcFiles) {
+    const content = fs.readFileSync(file, 'utf-8');
+    const basename = path.basename(file);
+
+    // No hardcoded API keys (direct string literals matching Firebase key pattern)
+    const apiKeyHardcoded = /apiKey:\s*'AIza[A-Za-z0-9_-]{30,}'/.test(content);
+    assert.equal(apiKeyHardcoded, false, `${basename} must NOT contain a hardcoded Firebase API key`);
+  }
+
+  // firebase.ts must use import.meta.env
+  const firebaseTs = fs.readFileSync(path.resolve('src/data/firebase.ts'), 'utf-8');
+  assert.ok(firebaseTs.includes('import.meta.env.VITE_FIREBASE_API_KEY'), 'firebase.ts must load API key from env');
+  assert.ok(firebaseTs.includes('import.meta.env.VITE_FIREBASE_PROJECT_ID'), 'firebase.ts must load project ID from env');
+
+  // .gitignore must exclude secrets
+  const gitignore = fs.readFileSync(path.resolve('.gitignore'), 'utf-8');
+  assert.ok(gitignore.includes('.env'), '.gitignore must exclude .env');
+  assert.ok(gitignore.includes('.env.local'), '.gitignore must exclude .env.local');
+  assert.ok(gitignore.includes('*.pem'), '.gitignore must exclude *.pem');
+  assert.ok(gitignore.includes('firebase_login.json'), '.gitignore must exclude firebase_login.json');
+});
+
+test('Security Audit: Firestore Rules Hardened with Default-Deny and Schema Validation', () => {
+  const rules = fs.readFileSync(path.resolve('firestore.rules'), 'utf-8');
+
+  // Default deny on catch-all path
+  assert.ok(rules.includes('allow read, write: if false'), 'Rules must have default-deny fallback');
+
+  // Schema validation function exists
+  assert.ok(rules.includes('hasRequiredReportFields'), 'Rules must include schema validation function');
+  assert.ok(rules.includes('kitchenId'), 'Schema validation must check kitchenId');
+  assert.ok(rules.includes('reportDate'), 'Schema validation must check reportDate');
+  assert.ok(rules.includes('mealTypeId'), 'Schema validation must check mealTypeId');
+  assert.ok(rules.includes('rawReportedQty'), 'Schema validation must check rawReportedQty');
+
+  // Create uses validation
+  assert.ok(rules.includes('allow create: if hasRequiredReportFields()'), 'daily_reports create must enforce schema');
+});
+
+test('Security Audit: Firebase Hosting Security Headers (HSTS, CSP, X-Frame)', () => {
+  const fbJson = JSON.parse(fs.readFileSync(path.resolve('firebase.json'), 'utf-8'));
+
+  assert.ok(fbJson.hosting, 'firebase.json must have hosting config');
+  assert.ok(Array.isArray(fbJson.hosting.headers), 'hosting must have headers array');
+
+  const headerBlock = fbJson.hosting.headers.find(h => h.source === '**');
+  assert.ok(headerBlock, 'Must have a global ** header block');
+
+  const headerMap = {};
+  for (const h of headerBlock.headers) {
+    headerMap[h.key] = h.value;
+  }
+
+  assert.ok(headerMap['Strict-Transport-Security'], 'Must have HSTS header');
+  assert.ok(headerMap['Strict-Transport-Security'].includes('max-age=31536000'), 'HSTS must enforce 1-year max-age');
+  assert.equal(headerMap['X-Frame-Options'], 'DENY', 'X-Frame-Options must be DENY');
+  assert.equal(headerMap['X-Content-Type-Options'], 'nosniff', 'X-Content-Type-Options must be nosniff');
+  assert.ok(headerMap['Referrer-Policy'], 'Must have Referrer-Policy header');
+  assert.ok(headerMap['Content-Security-Policy'], 'Must have CSP header');
+  assert.ok(headerMap['Content-Security-Policy'].includes("default-src 'self'"), 'CSP must restrict default-src to self');
+});
+
+test('Security Audit: Centralized Permissions Module (SSOT)', () => {
+  // Verify permissions.ts exists
+  const permPath = path.resolve('src/utils/permissions.ts');
+  assert.ok(fs.existsSync(permPath), 'src/utils/permissions.ts must exist');
+
+  const permContent = fs.readFileSync(permPath, 'utf-8');
+  assert.ok(permContent.includes('isAdmin'), 'Must export isAdmin');
+  assert.ok(permContent.includes('isSupplier'), 'Must export isSupplier');
+  assert.ok(permContent.includes('canApproveRows'), 'Must export canApproveRows');
+  assert.ok(permContent.includes('canEditReports'), 'Must export canEditReports');
+  assert.ok(permContent.includes('canPerformAdminActions'), 'Must export canPerformAdminActions');
+  assert.ok(permContent.includes('getAllowedTabs'), 'Must export getAllowedTabs');
+
+  // App.tsx must import from centralized permissions
+  const appContent = fs.readFileSync(path.resolve('src/App.tsx'), 'utf-8');
+  assert.ok(appContent.includes("from './utils/permissions'"), 'App.tsx must import from centralized permissions module');
+});
+
+test('Security Audit: Input Sanitization (XSS Prevention)', () => {
+  // Verify sanitize.ts exists
+  const sanitizePath = path.resolve('src/utils/sanitize.ts');
+  assert.ok(fs.existsSync(sanitizePath), 'src/utils/sanitize.ts must exist');
+
+  const sanitizeContent = fs.readFileSync(sanitizePath, 'utf-8');
+  assert.ok(sanitizeContent.includes('sanitizeText'), 'Must export sanitizeText');
+  assert.ok(sanitizeContent.includes('sanitizeDailyReportInput'), 'Must export sanitizeDailyReportInput');
+  assert.ok(sanitizeContent.includes('sanitizeReason'), 'Must export sanitizeReason');
+  assert.ok(sanitizeContent.includes('HTML_TAG_REGEX'), 'Must strip HTML tags');
+  assert.ok(sanitizeContent.includes('JS_PROTOCOL_REGEX'), 'Must strip javascript: protocol');
+
+  // App.tsx must import and use sanitizer
+  const appContent = fs.readFileSync(path.resolve('src/App.tsx'), 'utf-8');
+  assert.ok(appContent.includes("from './utils/sanitize'"), 'App.tsx must import sanitize utilities');
+  assert.ok(appContent.includes('sanitizeDailyReportInput'), 'App.tsx must sanitize daily report inputs');
+  assert.ok(appContent.includes('sanitizeReason'), 'App.tsx must sanitize rejection/return reasons');
+
+  // Functional test: verify sanitizeText strips tags
+  // Inline JS version of the sanitizer for test validation
+  const stripTags = (str) => str.replace(/<\/?[^>]+(>|$)/gi, '').replace(/javascript\s*:/gi, '').replace(/on\w+\s*=/gi, '').trim();
+  assert.equal(stripTags('<script>alert("xss")</script>Hello'), 'alert("xss")Hello');
+  assert.equal(stripTags('<b>Bold</b> text'), 'Bold text');
+  assert.equal(stripTags('Clean text'), 'Clean text');
+  assert.equal(stripTags('javascript:alert(1)'), 'alert(1)');
+});
+

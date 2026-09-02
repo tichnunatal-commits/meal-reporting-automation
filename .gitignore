@@ -11,9 +11,20 @@ Thumbs.db
 docs/scratch_*.md
 **/*.draft.md
 
-# Dependencies / build output (once a stack is chosen — see docs/stack.md)
+# Dependencies / build output
 node_modules/
 dist/
 build/
+
+# Environment & secrets
 .env
 .env.local
+.env.*.local
+*.pem
+firebase_login.json
+.firebaserc
+
+# Firebase local emulator data
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
