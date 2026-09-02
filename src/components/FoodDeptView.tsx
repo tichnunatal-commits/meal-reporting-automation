@@ -24,6 +24,11 @@ interface FoodDeptViewProps {
   onFinalApproveSummary: (summaryId: number) => void;
 }
 
+const HEBREW_MONTH_NAMES = [
+  'ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני',
+  'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'
+];
+
 export const FoodDeptView: React.FC<FoodDeptViewProps> = ({
   currentUser,
   kitchens,
@@ -39,6 +44,12 @@ export const FoodDeptView: React.FC<FoodDeptViewProps> = ({
   const selectedKitchen = kitchens.find(k => k.id === selectedSummary?.kitchenId);
   const selectedKitchenReports = dailyReports.filter(r => r.kitchenId === selectedKitchen?.id);
   const selectedTariffs = tariffs.filter(t => t.kitchenId === selectedKitchen?.id);
+
+  // חילוץ חודש ושנה דינמיים לפי הדיווחים/הלוח הנוכחי בלייב
+  const activeMonth = selectedSummary?.periodMonth || monthlySummaries[0]?.periodMonth || (new Date().getMonth() + 1);
+  const activeYear = selectedSummary?.periodYear || monthlySummaries[0]?.periodYear || new Date().getFullYear();
+  const currentMonthName = HEBREW_MONTH_NAMES[activeMonth - 1] || 'ספטמבר';
+  const dynamicPeriodTitle = `${currentMonthName} ${activeYear}`;
 
   // הרצת מנוע החישוב R1-R5 על המטבח הנבחר
   const calcResult = selectedKitchen ? MealCalculationEngine.calculateMonthlySummary(
@@ -56,7 +67,7 @@ export const FoodDeptView: React.FC<FoodDeptViewProps> = ({
   const totalAmountAllKitchens = monthlySummaries.reduce((sum, s) => sum + s.calculatedTotalAmountNis, 0);
 
   const handleExport = (type: 'excel' | 'pdf') => {
-    const currentPeriodStr = `${String(new Date().getMonth() + 1).padStart(2, '0')}/${new Date().getFullYear()}`;
+    const currentPeriodStr = `${String(activeMonth).padStart(2, '0')}/${activeYear}`;
     setExportNotice(`הופק בהצלחה: דוח סיכום תשלום חודש ${currentPeriodStr} (${type.toUpperCase()}) עם פילוח חוקי R1-R5`);
     setTimeout(() => setExportNotice(null), 4000);
   };
@@ -116,7 +127,7 @@ export const FoodDeptView: React.FC<FoodDeptViewProps> = ({
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 mb-4 border-b border-slate-100 gap-3">
           <div>
-            <h3 className="font-bold text-slate-800 text-sm">סטטוס מטבחים לחודש אוגוסט 2026</h3>
+            <h3 className="font-bold text-slate-800 text-sm">סטטוס מטבחים לחודש {dynamicPeriodTitle}</h3>
             <p className="text-xs text-slate-500">בחר מטבח לצפייה בצנרת החישוב המלאה של מדור מזון</p>
           </div>
 
